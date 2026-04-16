@@ -51,7 +51,7 @@ const LIGHT_THEME = {
   redD: "#FFEAEA",
   orange: "#E65100",
   orangeD: "#FFF2E8",
-  purple: "#5700FF",
+  purple: "#0086D1",
   cyan: "#74CFD0",
   pink: "#ED008C",
   text: "#3C3C3B",
@@ -77,7 +77,7 @@ const PIE_C_DARK = [
 
 const PIE_C_LIGHT = [
   "#5500FF",
-  "#5700FF",
+  "#0086D1",
   "#ED008C",
   "#FF0080",
   "#74CFD0",
