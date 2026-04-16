@@ -91,8 +91,14 @@ const PIE_C_LIGHT = [
   "#000000",
 ];
 
-let P = DARK_THEME;
-let PIE_C = PIE_C_DARK;
+const INITIAL_THEME_MODE =
+  typeof window !== "undefined" &&
+  window.localStorage.getItem("theme-mode") === "light"
+    ? "light"
+    : "dark";
+
+let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
+let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
 
 function KPI({ label, value, sub, color, icon }) {
   return (
@@ -314,16 +320,10 @@ function TabBtn({ id, icon, label, activeTab, onSelect }) {
 }
 
 export default function App() {
-  const [themeMode, setThemeMode] = useState(() => {
-    if (typeof window === "undefined") return "dark";
-    const saved = window.localStorage.getItem("theme-mode");
-    return saved === "light" ? "light" : "dark";
-  });
+  const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
 
   useEffect(() => {
     window.localStorage.setItem("theme-mode", themeMode);
-    P = themeMode === "light" ? LIGHT_THEME : DARK_THEME;
-    PIE_C = themeMode === "light" ? PIE_C_LIGHT : PIE_C_DARK;
   }, [themeMode]);
 
   const {
@@ -544,7 +544,11 @@ export default function App() {
               }}
             >
               <button
-                onClick={() => setThemeMode("dark")}
+                onClick={() => {
+                  P = DARK_THEME;
+                  PIE_C = PIE_C_DARK;
+                  setThemeMode("dark");
+                }}
                 style={{
                   border: "none",
                   background: themeMode === "dark" ? P.accent : "transparent",
@@ -557,7 +561,11 @@ export default function App() {
                 Dark
               </button>
               <button
-                onClick={() => setThemeMode("light")}
+                onClick={() => {
+                  P = LIGHT_THEME;
+                  PIE_C = PIE_C_LIGHT;
+                  setThemeMode("light");
+                }}
                 style={{
                   border: "none",
                   background: themeMode === "light" ? P.accent : "transparent",
