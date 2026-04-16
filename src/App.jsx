@@ -1,16 +1,6 @@
-import { useState, useMemo, useCallback, useRef } from "react";
-import * as XLSX from "xlsx";
-import {
-  AGENT_MAP,
-  parseDataPt,
-  parseSec,
-  fmtSec,
-  fmtPct,
-  normalize,
-  splitTitulo,
-  isTransferencia,
-  isErroApp,
-} from "./utils.js";
+import { useEffect, useState } from "react";
+import { fmtSec, fmtPct } from "./utils.js";
+import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
   BarChart,
   Bar,
@@ -29,7 +19,7 @@ import {
   Area,
 } from "recharts";
 
-const P = {
+const DARK_THEME = {
   bg: "#0c0e14",
   card: "#13161f",
   cardH: "#191d2a",
@@ -48,7 +38,28 @@ const P = {
   dim: "#64748b",
   muted: "#334155",
 };
-const PIE_C = [
+
+const LIGHT_THEME = {
+  bg: "#F5F5F7",
+  card: "#FFFFFF",
+  cardH: "#F2F2F2",
+  bdr: "#DDDDDD",
+  accent: "#5500FF",
+  green: "#00D4AA",
+  greenD: "#EDEDEE",
+  red: "#FF0000",
+  redD: "#FFEAEA",
+  orange: "#E65100",
+  orangeD: "#FFF2E8",
+  purple: "#5700FF",
+  cyan: "#74CFD0",
+  pink: "#ED008C",
+  text: "#3C3C3B",
+  dim: "#888888",
+  muted: "#3C3C3C",
+};
+
+const PIE_C_DARK = [
   "#3b82f6",
   "#10b981",
   "#f59e0b",
@@ -63,6 +74,25 @@ const PIE_C = [
   "#22d3ee",
   "#fb7185",
 ];
+
+const PIE_C_LIGHT = [
+  "#5500FF",
+  "#5700FF",
+  "#ED008C",
+  "#FF0080",
+  "#74CFD0",
+  "#00D4AA",
+  "#00997A",
+  "#FFC000",
+  "#E65100",
+  "#FF0000",
+  "#3C3C3C",
+  "#888888",
+  "#000000",
+];
+
+let P = DARK_THEME;
+let PIE_C = PIE_C_DARK;
 
 function KPI({ label, value, sub, color, icon }) {
   return (
@@ -284,262 +314,53 @@ function TabBtn({ id, icon, label, activeTab, onSelect }) {
 }
 
 export default function App() {
-  const [cons, setCons] = useState([]);
-  const [atend, setAtend] = useState([]);
-  const [tickets, setTickets] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState("resumo");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [seriesVis, setSeriesVis] = useState({
-    lig: true,
-    transf: true,
-    erros: true,
+  const [themeMode, setThemeMode] = useState(() => {
+    if (typeof window === "undefined") return "dark";
+    const saved = window.localStorage.getItem("theme-mode");
+    return saved === "light" ? "light" : "dark";
   });
-  const [metricSel, setMetricSel] = useState("Total");
-  const fileRef = useRef();
 
-  const handleFile = useCallback((file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const wb = XLSX.read(e.target.result, { type: "array", cellDates: true });
+  useEffect(() => {
+    window.localStorage.setItem("theme-mode", themeMode);
+    P = themeMode === "light" ? LIGHT_THEME : DARK_THEME;
+    PIE_C = themeMode === "light" ? PIE_C_LIGHT : PIE_C_DARK;
+  }, [themeMode]);
 
-      const wsCons = wb.Sheets["Cola_Atplus_Cons"];
-      if (wsCons) {
-        const raw = XLSX.utils.sheet_to_json(wsCons, {
-          header: 1,
-          range: 3,
-          raw: true,
-        });
-        setCons(
-          raw
-            .filter((r) => r[0])
-            .map((r) => ({
-              data: String(r[0]),
-              total: Number(r[2]) || 0,
-              atendidas: Number(r[3]) || 0,
-              naoAtendidas: Number(r[5]) || 0,
-              abandonadas: Number(r[6]) || 0,
-              txAbandono: Number(r[7]) || 0,
-              tma: parseSec(r[8]),
-              tme: parseSec(r[9]),
-              dateReal: parseDataPt(String(r[0])),
-            })),
-        );
-      }
-
-      const wsAtend = wb.Sheets["Cola_Atplus_Atend"];
-      if (wsAtend) {
-        const raw = XLSX.utils.sheet_to_json(wsAtend, {
-          header: 1,
-          range: 3,
-          raw: true,
-        });
-        setAtend(
-          raw
-            .filter((r) => r[0] && r[2])
-            .map((r) => ({
-              data: String(r[0]),
-              ramal: String(r[2] || ""),
-              tentativas: Number(r[3]) || 0,
-              atendidas: Number(r[4]) || 0,
-              perdidas: Number(r[5]) || 0,
-              tma: parseSec(r[7]),
-              tme: parseSec(r[8]),
-              dateReal: parseDataPt(String(r[0])),
-            })),
-        );
-      }
-
-      const wsEll = wb.Sheets["Cola_Ellevo"];
-      if (wsEll) {
-        const raw = XLSX.utils.sheet_to_json(wsEll, {
-          header: 1,
-          range: 3,
-          raw: true,
-        });
-        setTickets(
-          raw
-            .filter((r) => r[0])
-            .map((r) => {
-              const titulo = String(r[3] || "");
-              const [catRaw] = splitTitulo(titulo);
-              const ab = r[2];
-              let dr = null;
-              if (ab instanceof Date) dr = ab;
-              else if (typeof ab === "string" && ab) dr = new Date(ab);
-              return {
-                chamado: String(r[0]),
-                titulo,
-                natureza: String(r[6] || ""),
-                responsavel: String(r[7] || ""),
-                qualificacao: String(r[8] || ""),
-                severidade: String(r[9] || ""),
-                categoria: normalize(catRaw),
-                dateReal: dr && !isNaN(dr) ? dr : null,
-                status: !r[1] || r[1] === "-" ? "Aberto" : "Fechado",
-              };
-            }),
-        );
-      }
-      setLoaded(true);
-    };
-    reader.readAsArrayBuffer(file);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e) => {
-      e.preventDefault();
-      const f = e.dataTransfer.files[0];
-      if (f) handleFile(f);
-    },
-    [handleFile],
-  );
-
-  const df = useMemo(() => (dateFrom ? new Date(dateFrom) : null), [dateFrom]);
-  const dt = useMemo(() => (dateTo ? new Date(dateTo) : null), [dateTo]);
-  const inRange = useCallback(
-    (d) => {
-      if (!d) return true;
-      if (df && d < df) return false;
-      if (dt) {
-        const e = new Date(dt);
-        e.setHours(23, 59, 59);
-        if (d > e) return false;
-      }
-      return true;
-    },
-    [df, dt],
-  );
-
-  const fCons = useMemo(
-    () => cons.filter((c) => inRange(c.dateReal)),
-    [cons, inRange],
-  );
-  const fAtend = useMemo(
-    () => atend.filter((a) => inRange(a.dateReal)),
-    [atend, inRange],
-  );
-  const fTickets = useMemo(
-    () => tickets.filter((t) => inRange(t.dateReal)),
-    [tickets, inRange],
-  );
-
-  const kpis = useMemo(() => {
-    const tc = fCons.reduce((a, c) => a + c.total, 0);
-    const ta = fCons.reduce((a, c) => a + c.atendidas, 0);
-    const tab = fCons.reduce((a, c) => a + c.abandonadas + c.naoAtendidas, 0);
-    const tma = fCons.length
-      ? Math.round(fCons.reduce((a, c) => a + c.tma, 0) / fCons.length)
-      : 0;
-    const tme = fCons.length
-      ? Math.round(fCons.reduce((a, c) => a + c.tme, 0) / fCons.length)
-      : 0;
-    return {
-      tc,
-      ta,
-      tab,
-      tma,
-      tme,
-      txAt: tc ? ta / tc : 0,
-      tkt: fTickets.length,
-      tktF: fTickets.filter((t) => t.status === "Fechado").length,
-      tktA: fTickets.filter((t) => t.status === "Aberto").length,
-      tktTransf: fTickets.filter(isTransferencia).length,
-      tktErros: fTickets.filter(isErroApp).length,
-      dias: fCons.length,
-    };
-  }, [fCons, fTickets]);
-
-  const agg = useCallback((arr, key) => {
-    const m = {};
-    arr.forEach((i) => {
-      const k = typeof key === "function" ? key(i) : i[key];
-      if (k && k !== "-") m[k] = (m[k] || 0) + 1;
-    });
-    return Object.entries(m)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, value]) => ({ name, value }));
-  }, []);
-
-  const catData = useMemo(() => agg(fTickets, "categoria"), [fTickets, agg]);
-  const sevData = useMemo(
-    () =>
-      agg(fTickets, (t) =>
-        t.severidade && t.severidade !== "-" ? t.severidade : null,
-      ),
-    [fTickets, agg],
-  );
-  const natData = useMemo(() => agg(fTickets, "natureza"), [fTickets, agg]);
-  const qualData = useMemo(
-    () =>
-      agg(fTickets, (t) => {
-        const q = t.qualificacao;
-        return q && q !== "-" ? q : "(sem qualificação)";
-      }),
-    [fTickets, agg],
-  );
-  const respData = useMemo(
-    () =>
-      agg(
-        fTickets,
-        (t) => t.responsavel?.split(" ").slice(0, 2).join(" ") || "N/I",
-      ),
-    [fTickets, agg],
-  );
-
-  const equipe = useMemo(
-    () =>
-      Object.entries(AGENT_MAP)
-        .map(([fn, en]) => {
-          const fa = fAtend.filter((a) => a.ramal === fn);
-          const ft = fTickets.filter((t) => t.responsavel === en);
-          const ca = fa.reduce((a, c) => a + c.atendidas, 0);
-          return {
-            nome: fn.replace(" - Central", ""),
-            chamAtend: ca,
-            tickets: ft.length,
-            tktAbertos: ft.filter((t) => t.status === "Aberto").length,
-            total: ca + ft.length,
-            tma: fa.length
-              ? Math.round(fa.reduce((a, c) => a + c.tma, 0) / fa.length)
-              : 0,
-            tme: fa.length
-              ? Math.round(fa.reduce((a, c) => a + c.tme, 0) / fa.length)
-              : 0,
-            transferencias: ft.filter(isTransferencia).length,
-            errosApp: ft.filter(isErroApp).length,
-          };
-        })
-        .sort((a, b) => b.total - a.total),
-    [fAtend, fTickets],
-  );
-
-  const dailyChart = useMemo(
-    () =>
-      fCons.map((c) => ({
-        dia: c.data
-          .replace(/ de /, "/ ")
-          .replace("Janeiro", "Jan")
-          .replace("Fevereiro", "Fev")
-          .replace("Março", "Mar")
-          .replace("Abril", "Abr")
-          .replace("Maio", "Mai")
-          .replace("Junho", "Jun")
-          .replace("Julho", "Jul")
-          .replace("Agosto", "Ago")
-          .replace("Setembro", "Set")
-          .replace("Outubro", "Out")
-          .replace("Novembro", "Nov")
-          .replace("Dezembro", "Dez"),
-        Total: c.total,
-        Atendidas: c.atendidas,
-        TMA: c.tma,
-        TME: c.tme,
-        "Tx Atend": c.total ? c.atendidas / c.total : 0,
-      })),
-    [fCons],
-  );
+  const {
+    cons,
+    tickets,
+    loaded,
+    tab,
+    dateFrom,
+    dateTo,
+    seriesVis,
+    metricSel,
+    saveStatus,
+    isRestoring,
+    incrementalStatus,
+    fileRef,
+    incrementalFileRef,
+    fCons,
+    fAtend,
+    fTickets,
+    kpis,
+    catData,
+    sevData,
+    natData,
+    qualData,
+    respData,
+    equipe,
+    dailyChart,
+    setTab,
+    setDateFrom,
+    setDateTo,
+    setSeriesVis,
+    setMetricSel,
+    handleFile,
+    handleIncrementalFile,
+    handleDrop,
+    retryLoadFromDatabase,
+  } = useDashboardController();
 
   if (!loaded) {
     return (
@@ -566,11 +387,24 @@ export default function App() {
               letterSpacing: -0.5,
             }}
           >
-            Central de Relacionamentos
+            Central de Relacionamentos NDD
           </h1>
           <p style={{ color: P.dim, fontSize: 14, margin: "0 0 28px" }}>
-            Arraste o <b>Dashboard_Central.xlsx</b> ou clique para selecionar
+            {isRestoring
+              ? "Tentando carregar os dados salvos no SQLite..."
+              : "Arraste o Dashboard_Central.xlsx ou clique para selecionar"}
           </p>
+          {isRestoring && (
+            <div
+              style={{
+                fontSize: 12,
+                color: P.dim,
+                margin: "0 0 12px",
+              }}
+            >
+              Se a API ainda estiver iniciando, aguarde alguns segundos.
+            </div>
+          )}
           <div
             onClick={() => fileRef.current?.click()}
             style={{
@@ -580,6 +414,7 @@ export default function App() {
               cursor: "pointer",
               background: P.card,
               transition: "all .3s",
+              opacity: isRestoring ? 0.7 : 1,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = P.accent;
@@ -598,6 +433,39 @@ export default function App() {
               ou clique para procurar
             </div>
           </div>
+          {!isRestoring && (
+            <button
+              onClick={retryLoadFromDatabase}
+              style={{
+                marginTop: 10,
+                background: P.card,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 8,
+                color: P.text,
+                padding: "7px 10px",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Tentar carregar do SQLite
+            </button>
+          )}
+          {saveStatus.state !== "idle" && (
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                color:
+                  saveStatus.state === "success"
+                    ? P.green
+                    : saveStatus.state === "error"
+                      ? P.red
+                      : P.dim,
+              }}
+            >
+              {saveStatus.message}
+            </div>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -637,12 +505,18 @@ export default function App() {
                 fontWeight: 800,
                 margin: 0,
                 letterSpacing: -0.5,
-                background: `linear-gradient(135deg, ${P.accent}, ${P.purple})`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
+                color: themeMode === "light" ? P.accent : P.text,
+                background:
+                  themeMode === "dark"
+                    ? `linear-gradient(135deg, ${P.accent}, ${P.purple})`
+                    : "none",
+                WebkitBackgroundClip:
+                  themeMode === "dark" ? "text" : "border-box",
+                WebkitTextFillColor:
+                  themeMode === "dark" ? "transparent" : P.accent,
               }}
             >
-              Central de Relacionamentos
+              Central de Relacionamentos NDD
             </h1>
             <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
               {kpis.dias} dias filtrados · {cons.length} total ·{" "}
@@ -660,6 +534,42 @@ export default function App() {
               border: `1px solid ${P.bdr}`,
             }}
           >
+            <div
+              style={{
+                display: "flex",
+                background: P.cardH,
+                borderRadius: 7,
+                border: `1px solid ${P.bdr}`,
+                overflow: "hidden",
+              }}
+            >
+              <button
+                onClick={() => setThemeMode("dark")}
+                style={{
+                  border: "none",
+                  background: themeMode === "dark" ? P.accent : "transparent",
+                  color: themeMode === "dark" ? "#fff" : P.dim,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Dark
+              </button>
+              <button
+                onClick={() => setThemeMode("light")}
+                style={{
+                  border: "none",
+                  background: themeMode === "light" ? P.accent : "transparent",
+                  color: themeMode === "light" ? "#fff" : P.dim,
+                  padding: "4px 8px",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                Light
+              </button>
+            </div>
             <span style={{ fontSize: 11, color: P.dim, fontWeight: 600 }}>
               📅 De
             </span>
@@ -754,6 +664,13 @@ export default function App() {
             activeTab={tab}
             onSelect={setTab}
           />
+          <TabBtn
+            id="atualizacao"
+            icon="➕"
+            label="Atualização"
+            activeTab={tab}
+            onSelect={setTab}
+          />
         </div>
 
         {tab === "resumo" && (
@@ -842,11 +759,26 @@ export default function App() {
             </Section>
             {(() => {
               const METRICS = [
-                { key: "Total",     label: "Total Chamadas", color: P.accent,  pct: false },
-                { key: "Atendidas", label: "Atendidas",      color: P.green,   pct: false },
-                { key: "Tx Atend",  label: "Tx Atend.",      color: P.cyan,    pct: true  },
-                { key: "TMA",       label: "TMA (seg)",      color: P.orange,  pct: false },
-                { key: "TME",       label: "TME (seg)",      color: P.purple,  pct: false },
+                {
+                  key: "Total",
+                  label: "Total Chamadas",
+                  color: P.accent,
+                  pct: false,
+                },
+                {
+                  key: "Atendidas",
+                  label: "Atendidas",
+                  color: P.green,
+                  pct: false,
+                },
+                {
+                  key: "Tx Atend",
+                  label: "Tx Atend.",
+                  color: P.cyan,
+                  pct: true,
+                },
+                { key: "TMA", label: "TMA (seg)", color: P.orange, pct: false },
+                { key: "TME", label: "TME (seg)", color: P.purple, pct: false },
               ];
               const m = METRICS.find((x) => x.key === metricSel) || METRICS[0];
               return (
@@ -859,11 +791,30 @@ export default function App() {
                       padding: "14px 14px 10px",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: P.dim, textTransform: "uppercase", letterSpacing: 1 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 8,
+                        marginBottom: 12,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: P.dim,
+                          textTransform: "uppercase",
+                          letterSpacing: 1,
+                        }}
+                      >
                         Evolução Diária
                       </span>
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                      <div
+                        style={{ display: "flex", gap: 5, flexWrap: "wrap" }}
+                      >
                         {METRICS.map(({ key, label, color }) => (
                           <button
                             key={key}
@@ -873,7 +824,10 @@ export default function App() {
                               border: `1px solid ${metricSel === key ? color : P.bdr}`,
                               borderRadius: 20,
                               cursor: "pointer",
-                              background: metricSel === key ? color + "22" : "transparent",
+                              background:
+                                metricSel === key
+                                  ? color + "22"
+                                  : "transparent",
                               color: metricSel === key ? color : P.dim,
                               fontSize: 10,
                               fontWeight: 600,
@@ -892,7 +846,10 @@ export default function App() {
                           <XAxis
                             dataKey="dia"
                             tick={{ fill: P.dim, fontSize: 9 }}
-                            interval={Math.max(0, Math.floor(dailyChart.length / 12))}
+                            interval={Math.max(
+                              0,
+                              Math.floor(dailyChart.length / 12),
+                            )}
                           />
                           <YAxis
                             tick={{ fill: P.dim, fontSize: 10 }}
@@ -973,28 +930,61 @@ export default function App() {
                   <ResponsiveContainer>
                     <BarChart data={equipe} barGap={2}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                      <XAxis dataKey="nome" tick={{ fill: P.dim, fontSize: 10 }} />
+                      <XAxis
+                        dataKey="nome"
+                        tick={{ fill: P.dim, fontSize: 10 }}
+                      />
                       <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                       <Tooltip content={<TT />} />
-                      <Bar dataKey="chamAtend" name="Chamadas" fill={P.accent} radius={[4, 4, 0, 0]} stackId="a" />
-                      <Bar dataKey="tickets" name="Tickets" fill={P.purple} radius={[4, 4, 0, 0]} stackId="a" />
+                      <Bar
+                        dataKey="chamAtend"
+                        name="Chamadas"
+                        fill={P.accent}
+                        radius={[4, 4, 0, 0]}
+                        stackId="a"
+                      />
+                      <Bar
+                        dataKey="tickets"
+                        name="Tickets"
+                        fill={P.purple}
+                        radius={[4, 4, 0, 0]}
+                        stackId="a"
+                      />
                       <Legend wrapperStyle={{ fontSize: 10 }} />
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartCard>
                 <ChartCard title="TMA por Atendente (seg)" h={260}>
                   <ResponsiveContainer>
-                    <BarChart data={equipe.filter((e) => e.tma > 0)} barSize={32}>
+                    <BarChart
+                      data={equipe.filter((e) => e.tma > 0)}
+                      barSize={32}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                      <XAxis dataKey="nome" tick={{ fill: P.dim, fontSize: 10 }} />
+                      <XAxis
+                        dataKey="nome"
+                        tick={{ fill: P.dim, fontSize: 10 }}
+                      />
                       <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                       <Tooltip content={<TT />} />
-                      <Bar dataKey="tma" name="TMA(s)" fill={P.orange} radius={[4, 4, 0, 0]} />
+                      <Bar
+                        dataKey="tma"
+                        name="TMA(s)"
+                        fill={P.orange}
+                        radius={[4, 4, 0, 0]}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartCard>
               </div>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 14 }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  flexWrap: "wrap",
+                  marginTop: 14,
+                }}
+              >
                 <div
                   style={{
                     background: P.card,
@@ -1015,24 +1005,40 @@ export default function App() {
                       gap: 6,
                     }}
                   >
-                    <span style={{ fontSize: 10, fontWeight: 600, color: P.dim, textTransform: "uppercase", letterSpacing: 1 }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: P.dim,
+                        textTransform: "uppercase",
+                        letterSpacing: 1,
+                      }}
+                    >
                       Ligações · Transferências · Erros/App por Atendente
                     </span>
                     <div style={{ display: "flex", gap: 5 }}>
                       {[
                         { key: "lig", label: "Ligações", color: P.accent },
-                        { key: "transf", label: "Transferências", color: P.green },
+                        {
+                          key: "transf",
+                          label: "Transferências",
+                          color: P.green,
+                        },
                         { key: "erros", label: "Erros/App", color: P.red },
                       ].map(({ key, label, color }) => (
                         <button
                           key={key}
-                          onClick={() => setSeriesVis((v) => ({ ...v, [key]: !v[key] }))}
+                          onClick={() =>
+                            setSeriesVis((v) => ({ ...v, [key]: !v[key] }))
+                          }
                           style={{
                             padding: "3px 10px",
                             border: `1px solid ${seriesVis[key] ? color : P.bdr}`,
                             borderRadius: 20,
                             cursor: "pointer",
-                            background: seriesVis[key] ? color + "22" : "transparent",
+                            background: seriesVis[key]
+                              ? color + "22"
+                              : "transparent",
                             color: seriesVis[key] ? color : P.dim,
                             fontSize: 10,
                             fontWeight: 600,
@@ -1048,12 +1054,36 @@ export default function App() {
                     <ResponsiveContainer>
                       <BarChart data={equipe} barGap={3} barCategoryGap="30%">
                         <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                        <XAxis dataKey="nome" tick={{ fill: P.dim, fontSize: 10 }} />
+                        <XAxis
+                          dataKey="nome"
+                          tick={{ fill: P.dim, fontSize: 10 }}
+                        />
                         <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                         <Tooltip content={<TT />} />
-                        {seriesVis.lig && <Bar dataKey="chamAtend" name="Ligações Atendidas" fill={P.accent} radius={[4, 4, 0, 0]} />}
-                        {seriesVis.transf && <Bar dataKey="transferencias" name="Transferências" fill={P.green} radius={[4, 4, 0, 0]} />}
-                        {seriesVis.erros && <Bar dataKey="errosApp" name="Erros/App" fill={P.red} radius={[4, 4, 0, 0]} />}
+                        {seriesVis.lig && (
+                          <Bar
+                            dataKey="chamAtend"
+                            name="Ligações Atendidas"
+                            fill={P.accent}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        )}
+                        {seriesVis.transf && (
+                          <Bar
+                            dataKey="transferencias"
+                            name="Transferências"
+                            fill={P.green}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        )}
+                        {seriesVis.erros && (
+                          <Bar
+                            dataKey="errosApp"
+                            name="Erros/App"
+                            fill={P.red}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        )}
                         <Legend wrapperStyle={{ fontSize: 10 }} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1063,18 +1093,53 @@ export default function App() {
             </Section>
             <Section title="Alertas" icon="🚨">
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {equipe.filter((e) => e.tktAbertos > 3).map((e) => (
-                  <div key={e.nome + "t"} style={{ background: P.redD, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: P.text, border: `1px solid ${P.red}33` }}>
-                    🔴 <b>{e.nome}</b> — <b>{e.tktAbertos}</b> tickets em aberto
-                  </div>
-                ))}
-                {equipe.filter((e) => e.tma > 300).map((e) => (
-                  <div key={e.nome + "m"} style={{ background: P.orangeD, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: P.text, border: `1px solid ${P.orange}33` }}>
-                    ⏱ <b>{e.nome}</b> — TMA de <b>{fmtSec(e.tma)}</b> (acima de 5min)
-                  </div>
-                ))}
+                {equipe
+                  .filter((e) => e.tktAbertos > 3)
+                  .map((e) => (
+                    <div
+                      key={e.nome + "t"}
+                      style={{
+                        background: P.redD,
+                        borderRadius: 10,
+                        padding: "10px 14px",
+                        fontSize: 12,
+                        color: P.text,
+                        border: `1px solid ${P.red}33`,
+                      }}
+                    >
+                      🔴 <b>{e.nome}</b> — <b>{e.tktAbertos}</b> tickets em
+                      aberto
+                    </div>
+                  ))}
+                {equipe
+                  .filter((e) => e.tma > 300)
+                  .map((e) => (
+                    <div
+                      key={e.nome + "m"}
+                      style={{
+                        background: P.orangeD,
+                        borderRadius: 10,
+                        padding: "10px 14px",
+                        fontSize: 12,
+                        color: P.text,
+                        border: `1px solid ${P.orange}33`,
+                      }}
+                    >
+                      ⏱ <b>{e.nome}</b> — TMA de <b>{fmtSec(e.tma)}</b> (acima
+                      de 5min)
+                    </div>
+                  ))}
                 {equipe.every((e) => e.tktAbertos <= 3 && e.tma <= 300) && (
-                  <div style={{ background: P.greenD, borderRadius: 10, padding: "10px 14px", fontSize: 12, color: P.text, border: `1px solid ${P.green}33` }}>
+                  <div
+                    style={{
+                      background: P.greenD,
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      fontSize: 12,
+                      color: P.text,
+                      border: `1px solid ${P.green}33`,
+                    }}
+                  >
                     ✅ Equipe dentro dos parâmetros.
                   </div>
                 )}
@@ -1456,7 +1521,11 @@ export default function App() {
                   <div style={{ display: "flex", gap: 5 }}>
                     {[
                       { key: "lig", label: "Ligações", color: P.accent },
-                      { key: "transf", label: "Transferências", color: P.green },
+                      {
+                        key: "transf",
+                        label: "Transferências",
+                        color: P.green,
+                      },
                       { key: "erros", label: "Erros/App", color: P.red },
                     ].map(({ key, label, color }) => (
                       <button
@@ -1469,7 +1538,9 @@ export default function App() {
                           border: `1px solid ${seriesVis[key] ? color : P.bdr}`,
                           borderRadius: 20,
                           cursor: "pointer",
-                          background: seriesVis[key] ? color + "22" : "transparent",
+                          background: seriesVis[key]
+                            ? color + "22"
+                            : "transparent",
                           color: seriesVis[key] ? color : P.dim,
                           fontSize: 10,
                           fontWeight: 600,
@@ -1573,6 +1644,91 @@ export default function App() {
                     ✅ Equipe dentro dos parâmetros.
                   </div>
                 )}
+              </div>
+            </Section>
+          </>
+        )}
+
+        {tab === "atualizacao" && (
+          <>
+            <Section title="Atualização Incremental" icon="➕">
+              <div
+                style={{
+                  background: P.card,
+                  borderRadius: 14,
+                  border: `1px solid ${P.bdr}`,
+                  padding: "16px 16px 14px",
+                  maxWidth: 780,
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: P.dim,
+                    margin: "0 0 14px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Envie novamente o mesmo arquivo consolidado para atualizar o
+                  banco sem duplicar dados. Neste modo, apenas linhas novas sao
+                  aproveitadas e as ja existentes sao ignoradas.
+                </p>
+
+                <div
+                  onClick={() => incrementalFileRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${P.bdr}`,
+                    borderRadius: 12,
+                    padding: "26px 18px",
+                    cursor: "pointer",
+                    background: P.cardH,
+                    textAlign: "center",
+                    transition: "all .2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = P.accent;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = P.bdr;
+                  }}
+                >
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>📥</div>
+                  <div style={{ color: P.text, fontWeight: 600, fontSize: 13 }}>
+                    Clique para adicionar novas linhas
+                  </div>
+                  <div style={{ color: P.dim, fontSize: 11, marginTop: 4 }}>
+                    Formato aceito: .xlsx ou .xls
+                  </div>
+                </div>
+
+                {incrementalStatus.state !== "idle" && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      fontSize: 12,
+                      color:
+                        incrementalStatus.state === "success"
+                          ? P.green
+                          : incrementalStatus.state === "error"
+                            ? P.red
+                            : P.dim,
+                    }}
+                  >
+                    {incrementalStatus.message}
+                  </div>
+                )}
+
+                <input
+                  ref={incrementalFileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    if (e.target.files[0]) {
+                      handleIncrementalFile(e.target.files[0]);
+                    }
+                  }}
+                />
               </div>
             </Section>
           </>

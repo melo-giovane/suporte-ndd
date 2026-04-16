@@ -1,16 +1,61 @@
-# React + Vite
+# Central de Relacionamentos
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Dashboard React para analise operacional da Central de Relacionamentos (telefonia + tickets), com persistencia historica em SQLite para carga e atualizacao diaria.
 
-Currently, two official plugins are available:
+## Aplicacao web
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+npm run dev
+```
 
-## React Compiler
+O comando acima sobe frontend + API local juntos, permitindo salvamento automatico no SQLite ao fazer drop/click na tela inicial.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Se quiser rodar apenas o frontend (sem persistencia no banco), use:
 
-## Expanding the ESLint configuration
+```bash
+npm run dev:web
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Banco SQLite (separado do frontend)
+
+### 1. Inicializar schema
+
+```bash
+npm run db:init
+```
+
+### 2. Importar dados do arquivo consolidado
+
+```bash
+npm run db:import -- "data/input/Dashboard_-_Central.xlsx"
+```
+
+### 3. Atualizacao diaria (idempotente)
+
+```bash
+npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
+```
+
+## Upload pela tela inicial e persistencia
+
+- Com a API local ativa (`npm run dev:api` ou `npm run dev:full`), ao dropar ou selecionar o `.xlsx` no frontend o sistema:
+  1.  Processa os dados na interface para exibicao imediata.
+  2.  Envia o mesmo arquivo para `/api/import-dashboard`.
+  3.  Salva no SQLite com upsert e mostra o status na tela.
+
+## Estrutura criada para ETL
+
+- `scripts/db/init-db.js`: cria schema do banco
+- `scripts/db/import-dashboard.js`: le o xlsx e faz upsert
+- `scripts/db/update-daily.js`: alias para rotina diaria
+- `scripts/db/db.js`: conexao e schema
+- `scripts/db/parser.js`: parser do layout documentado nos arquivos `.md`
+- `data/sqlite/`: banco local (`*.db`, ignorado no Git)
+- `data/input/`: pasta de entrada para arquivo diario
+
+## Documentacao
+
+- Fluxo operacional geral: `Dashboard_Central_Documentacao.md`
+- Contexto do dashboard e regras: `claude.md`
+- ETL SQLite: `docs/sqlite-etl.md`

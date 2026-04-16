@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SQLite local database and raw daily input files
+data/sqlite/*.db
+data/sqlite/*.db-shm
+data/sqlite/*.db-wal
+data/input/*
+!data/input/.gitkeep
