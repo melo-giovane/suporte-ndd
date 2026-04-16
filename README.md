@@ -1,6 +1,9 @@
-# Central de Relacionamentos
+# Central de Relacionamentos v2
 
-Dashboard React para analise operacional da Central de Relacionamentos (telefonia + tickets), com persistencia historica em SQLite para carga e atualizacao diaria.
+Dashboard React para analise operacional da Central de Relacionamentos (telefonia + tickets), com API local em Express e persistencia historica em SQLite para carga e atualizacao diaria.
+
+- Versao atual: `2.0.0`
+- Autor: `Giovane Melo`
 
 ## Aplicacao web
 
