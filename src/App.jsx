@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { fmtSec, fmtPct } from "./utils.js";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { fmtSec, fmtPct, isErroApp, isTransferencia } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
   BarChart,
@@ -322,6 +322,7 @@ function TabBtn({ id, icon, label, activeTab, onSelect }) {
 
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
+  const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
 
   useEffect(() => {
     window.localStorage.setItem("theme-mode", themeMode);
@@ -362,6 +363,38 @@ export default function App() {
     handleDrop,
     retryLoadFromDatabase,
   } = useDashboardController();
+
+  const filteredTicketsList = useMemo(() => {
+    if (ticketListFilterSel === "todos") return fTickets;
+    if (ticketListFilterSel === "abertos")
+      return fTickets.filter((t) => t.status === "Aberto");
+    if (ticketListFilterSel === "fechados")
+      return fTickets.filter((t) => t.status === "Fechado");
+    if (ticketListFilterSel === "erros")
+      return fTickets.filter((t) => isErroApp(t));
+    if (ticketListFilterSel === "transferencias")
+      return fTickets.filter((t) => isTransferencia(t));
+    if (ticketListFilterSel === "outros")
+      return fTickets.filter((t) => !isErroApp(t) && !isTransferencia(t));
+    return fTickets;
+  }, [fTickets, ticketListFilterSel]);
+
+  const ticketFilterLabel = useMemo(() => {
+    const labels = {
+      todos: "Todos",
+      abertos: "Abertos",
+      fechados: "Fechados",
+      erros: "Erros/App",
+      transferencias: "Transferências",
+      outros: "Outros",
+    };
+    return labels[ticketListFilterSel] || "Todos";
+  }, [ticketListFilterSel]);
+
+  function handleTicketDrilldown(filterKey) {
+    setTicketListFilterSel(filterKey || "todos");
+    setTab("tickets");
+  }
 
   if (!loaded) {
     return (
@@ -719,6 +752,7 @@ export default function App() {
               equipe={equipe}
               seriesVis={seriesVis}
               setSeriesVis={setSeriesVis}
+              onTicketDrilldown={handleTicketDrilldown}
             />
           </Suspense>
         )}
@@ -932,8 +966,48 @@ export default function App() {
                 />
               </div>
             </Section>
-            <Section title="Tickets em Aberto" icon="🔴">
-              {fTickets.filter((t) => t.status === "Aberto").length === 0 ? (
+            <Section
+              title={`Lista de Tickets · ${ticketFilterLabel}`}
+              icon="🧾"
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  flexWrap: "wrap",
+                  marginBottom: 10,
+                }}
+              >
+                {[
+                  { key: "todos", label: "Todos" },
+                  { key: "abertos", label: "Abertos" },
+                  { key: "fechados", label: "Fechados" },
+                  { key: "erros", label: "Erros/App" },
+                  { key: "transferencias", label: "Transferências" },
+                  { key: "outros", label: "Outros" },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setTicketListFilterSel(opt.key)}
+                    style={{
+                      padding: "4px 10px",
+                      border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
+                      borderRadius: 18,
+                      background:
+                        ticketListFilterSel === opt.key
+                          ? `${P.accent}22`
+                          : "transparent",
+                      color: ticketListFilterSel === opt.key ? P.accent : P.dim,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {filteredTicketsList.length === 0 ? (
                 <div
                   style={{
                     padding: 18,
@@ -944,26 +1018,26 @@ export default function App() {
                     border: `1px solid ${P.bdr}`,
                   }}
                 >
-                  Nenhum ticket em aberto!
+                  Nenhum ticket para o filtro selecionado.
                 </div>
               ) : (
                 <Table
                   headers={[
                     "Chamado",
                     "Título",
+                    "Status",
                     "Responsável",
                     "Severidade",
                     "Categoria",
                   ]}
-                  rows={fTickets
-                    .filter((t) => t.status === "Aberto")
-                    .map((t) => [
-                      t.chamado,
-                      t.titulo.slice(0, 45),
-                      t.responsavel.split(" ").slice(0, 2).join(" "),
-                      t.severidade,
-                      t.categoria,
-                    ])}
+                  rows={filteredTicketsList.map((t) => [
+                    t.chamado,
+                    t.titulo.slice(0, 45),
+                    t.status,
+                    t.responsavel.split(" ").slice(0, 2).join(" "),
+                    t.severidade,
+                    t.categoria,
+                  ])}
                 />
               )}
             </Section>

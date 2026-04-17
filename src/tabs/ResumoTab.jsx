@@ -36,6 +36,7 @@ export default function ResumoTab({
   equipe,
   seriesVis,
   setSeriesVis,
+  onTicketDrilldown,
 }) {
   const [dailyCallsAgentSel, setDailyCallsAgentSel] = useState("__ALL__");
   const [dailyTicketMetricSel, setDailyTicketMetricSel] =
@@ -228,14 +229,29 @@ export default function ResumoTab({
 
       <Section title="Tickets (derivados das ligações)" icon="🎫">
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <KPI icon="🎫" label="Total" value={kpis.tkt} color={P.purple} />
-          <KPI icon="🟢" label="Fechados" value={kpis.tktF} color={P.green} />
-          <KPI
-            icon="🔴"
-            label="Abertos"
-            value={kpis.tktA}
-            color={kpis.tktA > 5 ? P.red : P.orange}
-          />
+          <div
+            onClick={() => onTicketDrilldown?.("todos")}
+            style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
+          >
+            <KPI icon="🎫" label="Total" value={kpis.tkt} color={P.purple} />
+          </div>
+          <div
+            onClick={() => onTicketDrilldown?.("fechados")}
+            style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
+          >
+            <KPI icon="🟢" label="Fechados" value={kpis.tktF} color={P.green} />
+          </div>
+          <div
+            onClick={() => onTicketDrilldown?.("abertos")}
+            style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
+          >
+            <KPI
+              icon="🔴"
+              label="Abertos"
+              value={kpis.tktA}
+              color={kpis.tktA > 5 ? P.red : P.orange}
+            />
+          </div>
           <KPI icon="📅" label="Dias" value={kpis.dias} color={P.accent} />
           <KPI
             icon="📈"
@@ -243,18 +259,28 @@ export default function ResumoTab({
             value={kpis.dias ? (kpis.tc / kpis.dias).toFixed(1) : "0"}
             color={P.cyan}
           />
-          <KPI
-            icon="🔄"
-            label="Transferências"
-            value={kpis.tktTransf}
-            color={P.accent}
-          />
-          <KPI
-            icon="🐛"
-            label="Erros/App"
-            value={kpis.tktErros}
-            color={P.red}
-          />
+          <div
+            onClick={() => onTicketDrilldown?.("transferencias")}
+            style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
+          >
+            <KPI
+              icon="🔄"
+              label="Transferências"
+              value={kpis.tktTransf}
+              color={P.accent}
+            />
+          </div>
+          <div
+            onClick={() => onTicketDrilldown?.("erros")}
+            style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
+          >
+            <KPI
+              icon="🐛"
+              label="Erros/App"
+              value={kpis.tktErros}
+              color={P.red}
+            />
+          </div>
         </div>
       </Section>
 
