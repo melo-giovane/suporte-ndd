@@ -385,6 +385,7 @@ export default function App() {
 
   const isMaster = authUser?.role === "master";
   const isAttendant = authUser?.role === "atendente";
+  const isAttendantTeamTicketsScope = isAttendant && attendantScope === "team";
 
   const handleLogout = useCallback(async () => {
     if (authToken) {
@@ -428,7 +429,6 @@ export default function App() {
     incrementalStatus,
     reprocessStatus,
     teamTotals,
-    fileRef,
     incrementalFileRef,
     reprocessFileRef,
     fCons,
@@ -447,14 +447,13 @@ export default function App() {
     setDateTo,
     setSeriesVis,
     setMetricSel,
-    handleFile,
     handleIncrementalFile,
     handleReprocessFile,
-    handleDrop,
     retryLoadFromDatabase,
   } = useDashboardController({
     authToken,
     viewScope: isAttendant ? attendantScope : "team",
+    canUpload: isMaster,
     onUnauthorized: handleLogout,
   });
 
@@ -641,6 +640,22 @@ export default function App() {
     return fTickets;
   }, [fTickets, ticketListFilterSel]);
 
+  const visibleTicketsList = useMemo(() => {
+    if (!isAttendant) return filteredTicketsList;
+
+    const responsibleName = (authUser?.attendantResponsavel || "")
+      .trim()
+      .toLowerCase();
+
+    if (!responsibleName) {
+      return [];
+    }
+
+    return filteredTicketsList.filter(
+      (t) => (t.responsavel || "").trim().toLowerCase() === responsibleName,
+    );
+  }, [authUser?.attendantResponsavel, filteredTicketsList, isAttendant]);
+
   const ticketFilterLabel = useMemo(() => {
     const labels = {
       todos: "Todos",
@@ -677,6 +692,12 @@ export default function App() {
       setPendingTicketListScroll(false);
     });
   }, [tab, pendingTicketListScroll]);
+
+  useEffect(() => {
+    if (isAttendantTeamTicketsScope) {
+      setSelectedTicket(null);
+    }
+  }, [isAttendantTeamTicketsScope]);
 
   if (!authToken || !authUser) {
     return (
@@ -814,7 +835,7 @@ export default function App() {
     );
   }
 
-  if (!loaded) {
+  if (!loaded && isRestoring) {
     return (
       <div
         style={{
@@ -825,8 +846,6 @@ export default function App() {
           justifyContent: "center",
           fontFamily: "'DM Sans',-apple-system,sans-serif",
         }}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
       >
         <div style={{ textAlign: "center", maxWidth: 480 }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>📊</div>
@@ -842,66 +861,8 @@ export default function App() {
             Central de Relacionamentos NDD
           </h1>
           <p style={{ color: P.dim, fontSize: 14, margin: "0 0 28px" }}>
-            {isRestoring
-              ? "Tentando carregar os dados salvos no SQLite..."
-              : "Arraste o Dashboard_Central.xlsx ou clique para selecionar"}
+            Tentando carregar os dados salvos no SQLite...
           </p>
-          {isRestoring && (
-            <div
-              style={{
-                fontSize: 12,
-                color: P.dim,
-                margin: "0 0 12px",
-              }}
-            >
-              Se a API ainda estiver iniciando, aguarde alguns segundos.
-            </div>
-          )}
-          <div
-            onClick={() => fileRef.current?.click()}
-            style={{
-              border: `2px dashed ${P.bdr}`,
-              borderRadius: 16,
-              padding: "48px 32px",
-              cursor: "pointer",
-              background: P.card,
-              transition: "all .3s",
-              opacity: isRestoring ? 0.7 : 1,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = P.accent;
-              e.currentTarget.style.background = P.cardH;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = P.bdr;
-              e.currentTarget.style.background = P.card;
-            }}
-          >
-            <div style={{ fontSize: 36, marginBottom: 12 }}>📁</div>
-            <div style={{ color: P.text, fontWeight: 600, fontSize: 14 }}>
-              Soltar arquivo .xlsx aqui
-            </div>
-            <div style={{ color: P.dim, fontSize: 12, marginTop: 4 }}>
-              ou clique para procurar
-            </div>
-          </div>
-          {!isRestoring && (
-            <button
-              onClick={retryLoadFromDatabase}
-              style={{
-                marginTop: 10,
-                background: P.card,
-                border: `1px solid ${P.bdr}`,
-                borderRadius: 8,
-                color: P.text,
-                padding: "7px 10px",
-                fontSize: 12,
-                cursor: "pointer",
-              }}
-            >
-              Tentar carregar do SQLite
-            </button>
-          )}
           {saveStatus.state !== "idle" && (
             <div
               style={{
@@ -918,13 +879,6 @@ export default function App() {
               {saveStatus.message}
             </div>
           )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls"
-            style={{ display: "none" }}
-            onChange={(e) => e.target.files[0] && handleFile(e.target.files[0])}
-          />
         </div>
       </div>
     );
@@ -1153,6 +1107,42 @@ export default function App() {
           </div>
         </div>
 
+        {!loaded && !isRestoring && (
+          <div
+            style={{
+              background: P.card,
+              border: `1px solid ${P.bdr}`,
+              borderRadius: 10,
+              padding: "10px 12px",
+              marginBottom: 12,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: 12, color: P.text, flex: "1 1 320px" }}>
+              {saveStatus.state === "error" && saveStatus.message
+                ? saveStatus.message
+                : "Nao foi possivel carregar os dados automaticamente."}
+            </div>
+            <button
+              onClick={retryLoadFromDatabase}
+              style={{
+                background: P.cardH,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 8,
+                color: P.text,
+                padding: "6px 10px",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -1250,35 +1240,14 @@ export default function App() {
 
         {tab === "telefonia" && (
           <>
-            <Section title="Detalhamento Diário" icon="📅">
-              <Table
-                headers={[
-                  "Dia",
-                  "Total",
-                  "Atend.",
-                  "Não At.",
-                  "Aband.",
-                  "Tx Ab./NA",
-                  "TMA(s)",
-                  "TME(s)",
-                  "Tx Atend.",
-                  "NS",
-                ]}
-                rows={fCons.map((c) => [
-                  c.data,
-                  c.total,
-                  c.atendidas,
-                  c.naoAtendidas,
-                  c.abandonadas,
-                  fmtPct(c.txAbandono),
-                  fmtSec(c.tma),
-                  fmtSec(c.tme),
-                  c.total ? fmtPct(c.atendidas / c.total) : "-",
-                  c.total && c.atendidas / c.total >= 0.9 ? "✅" : "⚠️",
-                ])}
-              />
-            </Section>
-            <Section title="Ranking de Atendentes" icon="🏆">
+            <Section
+              title={
+                isAttendant
+                  ? "Desempenho de Atendimentos"
+                  : "Ranking de Atendentes"
+              }
+              icon="🏆"
+            >
               <Table
                 headers={[
                   "Atendente",
@@ -1346,6 +1315,34 @@ export default function App() {
                 </ResponsiveContainer>
               </ChartCard>
             </div>
+            <Section title="Detalhamento Diário" icon="📅">
+              <Table
+                headers={[
+                  "Dia",
+                  "Total",
+                  "Atend.",
+                  "Não At.",
+                  "Aband.",
+                  "Tx Ab./NA",
+                  "TMA(s)",
+                  "TME(s)",
+                  "Tx Atend.",
+                  "NS",
+                ]}
+                rows={fCons.map((c) => [
+                  c.data,
+                  c.total,
+                  c.atendidas,
+                  c.naoAtendidas,
+                  c.abandonadas,
+                  fmtPct(c.txAbandono),
+                  fmtSec(c.tma),
+                  fmtSec(c.tme),
+                  c.total ? fmtPct(c.atendidas / c.total) : "-",
+                  c.total && c.atendidas / c.total >= 0.9 ? "✅" : "⚠️",
+                ])}
+              />
+            </Section>
           </>
         )}
 
@@ -1417,17 +1414,26 @@ export default function App() {
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
-              <ChartCard title="Por Responsável" h={200}>
-                <ResponsiveContainer>
-                  <BarChart data={respData} barSize={28}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                    <XAxis dataKey="name" tick={{ fill: P.dim, fontSize: 9 }} />
-                    <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                    <Tooltip content={<TT />} />
-                    <Bar dataKey="value" fill={P.pink} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
+              {!isAttendantTeamTicketsScope && (
+                <ChartCard title="Por Responsável" h={200}>
+                  <ResponsiveContainer>
+                    <BarChart data={respData} barSize={28}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fill: P.dim, fontSize: 9 }}
+                      />
+                      <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
+                      <Tooltip content={<TT />} />
+                      <Bar
+                        dataKey="value"
+                        fill={P.pink}
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              )}
             </div>
             <Section title="Tabelas Detalhadas" icon="📋">
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -1457,97 +1463,117 @@ export default function App() {
                 />
               </div>
             </Section>
-            <div ref={ticketListSectionRef}>
-              <Section
-                title={`Lista de Tickets · ${ticketFilterLabel}`}
-                icon="🧾"
-              >
+            {isAttendantTeamTicketsScope ? (
+              <Section title="Visão Consolidada da Equipe" icon="👥">
                 <div
                   style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    marginBottom: 10,
+                    padding: 14,
+                    borderRadius: 12,
+                    border: `1px solid ${P.bdr}`,
+                    background: P.card,
+                    color: P.dim,
+                    fontSize: 12,
+                    lineHeight: 1.5,
                   }}
                 >
-                  {[
-                    { key: "todos", label: "Todos" },
-                    { key: "abertos", label: "Abertos" },
-                    { key: "fechados", label: "Fechados" },
-                    { key: "erros", label: "Erros/App" },
-                    { key: "transferencias", label: "Transferências" },
-                    { key: "outros", label: "Outros" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => {
-                        setTicketListFilterSel(opt.key);
-                        setSelectedTicket(null);
-                      }}
-                      style={{
-                        padding: "4px 10px",
-                        border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
-                        borderRadius: 18,
-                        background:
-                          ticketListFilterSel === opt.key
-                            ? `${P.accent}22`
-                            : "transparent",
-                        color:
-                          ticketListFilterSel === opt.key ? P.accent : P.dim,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                  No modo "Totais da Equipe", o perfil atendente visualiza
+                  apenas indicadores consolidados de tickets. A listagem e os
+                  detalhes individuais permanecem restritos ao modo "Meus".
                 </div>
-                {filteredTicketsList.length === 0 ? (
+              </Section>
+            ) : (
+              <div ref={ticketListSectionRef}>
+                <Section
+                  title={`Lista de Tickets · ${ticketFilterLabel}`}
+                  icon="🧾"
+                >
                   <div
                     style={{
-                      padding: 18,
-                      textAlign: "center",
-                      color: P.green,
-                      background: P.card,
-                      borderRadius: 12,
-                      border: `1px solid ${P.bdr}`,
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      marginBottom: 10,
                     }}
                   >
-                    Nenhum ticket para o filtro selecionado.
+                    {[
+                      { key: "todos", label: "Todos" },
+                      { key: "abertos", label: "Abertos" },
+                      { key: "fechados", label: "Fechados" },
+                      { key: "erros", label: "Erros/App" },
+                      { key: "transferencias", label: "Transferências" },
+                      { key: "outros", label: "Outros" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => {
+                          setTicketListFilterSel(opt.key);
+                          setSelectedTicket(null);
+                        }}
+                        style={{
+                          padding: "4px 10px",
+                          border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
+                          borderRadius: 18,
+                          background:
+                            ticketListFilterSel === opt.key
+                              ? `${P.accent}22`
+                              : "transparent",
+                          color:
+                            ticketListFilterSel === opt.key ? P.accent : P.dim,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <Table
-                    headers={[
-                      "Chamado",
-                      "Título",
-                      "Status",
-                      "Responsável",
-                      "Severidade",
-                      "Categoria",
-                    ]}
-                    rows={filteredTicketsList.map((t) => [
-                      t.chamado,
-                      t.titulo.slice(0, 45),
-                      t.status,
-                      t.responsavel.split(" ").slice(0, 2).join(" "),
-                      t.severidade,
-                      t.categoria,
-                    ])}
-                    onRowClick={(idx) =>
-                      setSelectedTicket(filteredTicketsList[idx])
-                    }
-                    selectedRowIndex={
-                      selectedTicket
-                        ? filteredTicketsList.findIndex(
-                            (t) => t.chamado === selectedTicket.chamado,
-                          )
-                        : -1
-                    }
-                  />
-                )}
-              </Section>
-            </div>
+                  {visibleTicketsList.length === 0 ? (
+                    <div
+                      style={{
+                        padding: 18,
+                        textAlign: "center",
+                        color: P.green,
+                        background: P.card,
+                        borderRadius: 12,
+                        border: `1px solid ${P.bdr}`,
+                      }}
+                    >
+                      Nenhum ticket para o filtro selecionado.
+                    </div>
+                  ) : (
+                    <Table
+                      headers={[
+                        "Chamado",
+                        "Título",
+                        "Status",
+                        "Responsável",
+                        "Severidade",
+                        "Categoria",
+                      ]}
+                      rows={visibleTicketsList.map((t) => [
+                        t.chamado || "-",
+                        (t.titulo || "-").slice(0, 45),
+                        t.status || "-",
+                        (t.responsavel || "-").split(" ").slice(0, 2).join(" "),
+                        t.severidade || "-",
+                        t.categoria || "-",
+                      ])}
+                      onRowClick={(idx) =>
+                        setSelectedTicket(visibleTicketsList[idx])
+                      }
+                      selectedRowIndex={
+                        selectedTicket
+                          ? visibleTicketsList.findIndex(
+                              (t) => t.chamado === selectedTicket.chamado,
+                            )
+                          : -1
+                      }
+                    />
+                  )}
+                </Section>
+              </div>
+            )}
           </>
         )}
 

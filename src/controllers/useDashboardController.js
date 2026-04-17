@@ -5,7 +5,6 @@ import {
   buildEquipeData,
   buildKpis,
   filterByDateRange,
-  parseWorkbookData,
 } from "../models/dashboardModel.js";
 
 const API_BASE = import.meta.env.DEV ? "http://localhost:8787" : "";
@@ -14,17 +13,10 @@ function apiUrl(path) {
   return `${API_BASE}${path}`;
 }
 
-let xlsxModulePromise;
-function loadXlsxModule() {
-  if (!xlsxModulePromise) {
-    xlsxModulePromise = import("xlsx");
-  }
-  return xlsxModulePromise;
-}
-
 export function useDashboardController({
   authToken,
   viewScope = "own",
+  canUpload = false,
   onUnauthorized,
 } = {}) {
   const [cons, setCons] = useState([]);
@@ -54,63 +46,120 @@ export function useDashboardController({
     message: "",
   });
   const [teamTotals, setTeamTotals] = useState(null);
-  const fileRef = useRef();
+  const restoreRequestIdRef = useRef(0);
   const incrementalFileRef = useRef();
   const reprocessFileRef = useRef();
 
-  const loadFromDatabase = useCallback(async () => {
-    if (!authToken) {
-      setIsRestoring(false);
-      return false;
-    }
+  const loadFromDatabase = useCallback(
+    async ({ requestId } = {}) => {
+      const isStale =
+        requestId != null && requestId !== restoreRequestIdRef.current;
 
-    try {
-      const query = viewScope === "team" ? "?scope=team" : "?scope=own";
-      const resp = await fetch(apiUrl(`/api/dashboard-data${query}`), {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-
-      if (resp.status === 401 || resp.status === 403) {
-        onUnauthorized?.();
+      if (isStale) {
         return false;
       }
 
-      if (!resp.ok) return false;
+      if (!authToken) {
+        setLoaded(false);
+        setIsRestoring(false);
+        return false;
+      }
 
-      const body = await resp.json();
-      const data = body?.data;
-      if (!data) return false;
+      try {
+        const query = viewScope === "team" ? "?scope=team" : "?scope=own";
+        const resp = await fetch(apiUrl(`/api/dashboard-data${query}`), {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
 
-      const nextCons = (data.cons || []).map((row) => ({
-        ...row,
-        dateReal: row.dateReal ? new Date(row.dateReal) : null,
-      }));
-      const nextAtend = (data.atend || []).map((row) => ({
-        ...row,
-        dateReal: row.dateReal ? new Date(row.dateReal) : null,
-      }));
-      const nextTickets = (data.tickets || []).map((row) => ({
-        ...row,
-        dateReal: row.dataAbertura ? new Date(row.dataAbertura) : null,
-      }));
+        if (requestId != null && requestId !== restoreRequestIdRef.current) {
+          return false;
+        }
 
-      setCons(nextCons);
-      setAtend(nextAtend);
-      setTickets(nextTickets);
-      setTeamTotals(data.teamTotals || null);
-      setLoaded(true);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [authToken, onUnauthorized, viewScope]);
+        if (resp.status === 401 || resp.status === 403) {
+          onUnauthorized?.();
+          return false;
+        }
+
+        if (!resp.ok) {
+          let msg = "Nao foi possivel carregar os dados salvos.";
+          try {
+            const body = await resp.json();
+            msg = body?.error || msg;
+          } catch {
+            // Keep generic message when response is not JSON.
+          }
+          setSaveStatus({
+            state: "error",
+            message: msg,
+          });
+          return false;
+        }
+
+        const body = await resp.json();
+        const data = body?.data;
+
+        if (requestId != null && requestId !== restoreRequestIdRef.current) {
+          return false;
+        }
+
+        if (!data) {
+          setSaveStatus({
+            state: "error",
+            message: "Resposta da API sem dados para o dashboard.",
+          });
+          return false;
+        }
+
+        const nextCons = (data.cons || []).map((row) => ({
+          ...row,
+          dateReal: row.dateReal ? new Date(row.dateReal) : null,
+        }));
+        const nextAtend = (data.atend || []).map((row) => ({
+          ...row,
+          dateReal: row.dateReal ? new Date(row.dateReal) : null,
+        }));
+        const nextTickets = (data.tickets || []).map((row) => ({
+          ...row,
+          dateReal: row.dataAbertura ? new Date(row.dataAbertura) : null,
+        }));
+
+        setCons(nextCons);
+        setAtend(nextAtend);
+        setTickets(nextTickets);
+        setTeamTotals(data.teamTotals || null);
+        setSaveStatus({ state: "idle", message: "" });
+        setLoaded(true);
+        return true;
+      } catch {
+        setSaveStatus({
+          state: "error",
+          message:
+            "API local indisponivel. Inicie com 'npm run dev' (ou 'npm run dev:api').",
+        });
+        return false;
+      }
+    },
+    [authToken, onUnauthorized, viewScope],
+  );
 
   const restoreFromDatabaseWithRetry = useCallback(async () => {
-    const maxAttempts = 8;
+    const requestId = restoreRequestIdRef.current + 1;
+    restoreRequestIdRef.current = requestId;
+
+    const maxAttempts = 20;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const ok = await loadFromDatabase();
+      if (requestId !== restoreRequestIdRef.current) {
+        return false;
+      }
+
+      const ok = await loadFromDatabase({ requestId });
+
+      if (requestId !== restoreRequestIdRef.current) {
+        return false;
+      }
+
       if (ok) {
         setIsRestoring(false);
         return true;
@@ -121,7 +170,9 @@ export function useDashboardController({
       }
     }
 
-    setIsRestoring(false);
+    if (requestId === restoreRequestIdRef.current) {
+      setIsRestoring(false);
+    }
     return false;
   }, [loadFromDatabase]);
 
@@ -133,6 +184,15 @@ export function useDashboardController({
   const uploadToDatabase = useCallback(
     async (file, options = {}) => {
       const { onlyNew = false, statusSetter = setSaveStatus } = options;
+
+      if (!canUpload) {
+        statusSetter({
+          state: "error",
+          message: "Apenas usuários master podem atualizar o banco.",
+        });
+        return;
+      }
+
       try {
         statusSetter({
           state: "saving",
@@ -190,47 +250,7 @@ export function useDashboardController({
         });
       }
     },
-    [authToken, loadFromDatabase],
-  );
-
-  const handleFile = useCallback(
-    (file) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const XLSX = await loadXlsxModule();
-          const workbook = XLSX.read(e.target.result, {
-            type: "array",
-            cellDates: true,
-          });
-
-          const parsed = parseWorkbookData(XLSX, workbook);
-          setCons(parsed.cons);
-          setAtend(parsed.atend);
-          setTickets(parsed.tickets);
-          setLoaded(true);
-        } catch {
-          setSaveStatus({
-            state: "error",
-            message: "Falha ao processar o arquivo no navegador.",
-          });
-        }
-      };
-      reader.readAsArrayBuffer(file);
-
-      // Save to SQLite via local API in parallel with front-end parsing.
-      uploadToDatabase(file);
-    },
-    [uploadToDatabase],
-  );
-
-  const handleDrop = useCallback(
-    (e) => {
-      e.preventDefault();
-      const f = e.dataTransfer.files[0];
-      if (f) handleFile(f);
-    },
-    [handleFile],
+    [authToken, canUpload, loadFromDatabase],
   );
 
   const handleIncrementalFile = useCallback(
@@ -303,6 +323,10 @@ export function useDashboardController({
 
   useEffect(() => {
     restoreFromDatabaseWithRetry();
+
+    return () => {
+      restoreRequestIdRef.current += 1;
+    };
   }, [restoreFromDatabaseWithRetry]);
 
   return {
@@ -319,7 +343,6 @@ export function useDashboardController({
     incrementalStatus,
     reprocessStatus,
     teamTotals,
-    fileRef,
     incrementalFileRef,
     reprocessFileRef,
     fCons,
@@ -339,10 +362,8 @@ export function useDashboardController({
     setSeriesVis,
     setMetricSel,
     setSaveStatus,
-    handleFile,
     handleIncrementalFile,
     handleReprocessFile,
-    handleDrop,
     retryLoadFromDatabase,
   };
 }

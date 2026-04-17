@@ -216,7 +216,7 @@ function readDashboardData(db) {
         categoria_normalizada AS categoria,
         cliente,
         modulo,
-        COALESCE(tramites, "trâmites") AS tramites,
+        tramites,
         descricao,
         tempo_chamado_raw AS tempoChamadoRaw
       FROM ellevo_tickets
@@ -252,10 +252,26 @@ function readDashboardDataForAttendant(db, user, scope) {
       )
       .all();
 
+    const tickets = db
+      .prepare(
+        `
+        SELECT
+          data_abertura AS dataAbertura,
+          status,
+          natureza,
+          qualificacao,
+          severidade,
+          categoria_normalizada AS categoria
+        FROM ellevo_tickets
+        ORDER BY data_abertura
+      `,
+      )
+      .all();
+
     return {
       cons,
       atend: [],
-      tickets: [],
+      tickets,
     };
   }
 
@@ -324,7 +340,7 @@ function readDashboardDataForAttendant(db, user, scope) {
             categoria_normalizada AS categoria,
             cliente,
             modulo,
-            COALESCE(tramites, "trâmites") AS tramites,
+            tramites,
             descricao,
             tempo_chamado_raw AS tempoChamadoRaw
           FROM ellevo_tickets
