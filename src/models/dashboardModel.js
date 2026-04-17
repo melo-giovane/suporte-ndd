@@ -88,18 +88,38 @@ export function parseWorkbookData(XLSX, workbook) {
         .map((r) => {
           const titulo = String(r[3] || "");
           const [catRaw] = splitTitulo(titulo);
+          const fechamento = r[1];
           const ab = r[2];
           let dr = null;
           if (ab instanceof Date) dr = ab;
           else if (typeof ab === "string" && ab) dr = new Date(ab);
 
+          let df = null;
+          if (fechamento instanceof Date) df = fechamento;
+          else if (
+            typeof fechamento === "string" &&
+            fechamento &&
+            fechamento !== "-"
+          ) {
+            const parsed = new Date(fechamento);
+            df = Number.isNaN(parsed.getTime()) ? null : parsed;
+          }
+
           return {
             chamado: String(r[0]),
+            dataAbertura: dr && !isNaN(dr) ? dr.toISOString() : null,
+            dataFechamento: df ? df.toISOString() : null,
             titulo,
+            categoriaRaw: catRaw,
             natureza: String(r[6] || ""),
             responsavel: String(r[7] || ""),
             qualificacao: String(r[8] || ""),
             severidade: String(r[9] || ""),
+            cliente: String(r[4] || ""),
+            modulo: String(r[5] || ""),
+            tramites: String(r[10] || ""),
+            descricao: String(r[11] || ""),
+            tempoChamadoRaw: String(r[12] || ""),
             categoria: normalize(catRaw),
             dateReal: dr && !isNaN(dr) ? dr : null,
             status: !r[1] || r[1] === "-" ? "Aberto" : "Fechado",

@@ -81,14 +81,21 @@ app.get("/api/dashboard-data", (_, res) => {
         `
         SELECT
           chamado,
+          data_abertura AS dataAbertura,
+          data_fechamento AS dataFechamento,
+          status,
           titulo,
+          categoria_raw AS categoriaRaw,
           natureza,
           responsavel,
           qualificacao,
           severidade,
           categoria_normalizada AS categoria,
-          data_abertura AS dataAbertura,
-          status
+          cliente,
+          modulo,
+          COALESCE(tramites, "trâmites") AS tramites,
+          descricao,
+          tempo_chamado_raw AS tempoChamadoRaw
         FROM ellevo_tickets
         ORDER BY data_abertura
       `,

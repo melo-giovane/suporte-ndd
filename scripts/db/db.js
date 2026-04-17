@@ -88,7 +88,7 @@ export function ensureSchema(db) {
       responsavel TEXT,
       qualificacao TEXT,
       severidade TEXT,
-      trâmites TEXT,
+      tramites TEXT,
       descricao TEXT,
       tempo_chamado_raw TEXT,
       source_file TEXT NOT NULL,
@@ -104,4 +104,31 @@ export function ensureSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_ellevo_responsavel
       ON ellevo_tickets (responsavel);
   `);
+
+  // Lightweight migration for legacy databases where ticket detail columns
+  // may be missing or named with accented identifiers.
+  const ticketCols = db
+    .prepare("PRAGMA table_info(ellevo_tickets)")
+    .all()
+    .map((c) => c.name);
+
+  if (!ticketCols.includes("tramites")) {
+    db.exec("ALTER TABLE ellevo_tickets ADD COLUMN tramites TEXT");
+  }
+  if (!ticketCols.includes("descricao")) {
+    db.exec("ALTER TABLE ellevo_tickets ADD COLUMN descricao TEXT");
+  }
+  if (!ticketCols.includes("tempo_chamado_raw")) {
+    db.exec("ALTER TABLE ellevo_tickets ADD COLUMN tempo_chamado_raw TEXT");
+  }
+
+  if (ticketCols.includes("trâmites")) {
+    db.exec(`
+      UPDATE ellevo_tickets
+      SET tramites = COALESCE(NULLIF(tramites, ''), "trâmites")
+      WHERE (tramites IS NULL OR tramites = '')
+        AND "trâmites" IS NOT NULL
+        AND "trâmites" <> ''
+    `);
+  }
 }

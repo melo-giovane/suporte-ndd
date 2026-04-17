@@ -45,8 +45,13 @@ export function useDashboardController() {
     state: "idle",
     message: "",
   });
+  const [reprocessStatus, setReprocessStatus] = useState({
+    state: "idle",
+    message: "",
+  });
   const fileRef = useRef();
   const incrementalFileRef = useRef();
+  const reprocessFileRef = useRef();
 
   const loadFromDatabase = useCallback(async () => {
     try {
@@ -214,6 +219,16 @@ export function useDashboardController() {
     [uploadToDatabase],
   );
 
+  const handleReprocessFile = useCallback(
+    (file) => {
+      uploadToDatabase(file, {
+        onlyNew: false,
+        statusSetter: setReprocessStatus,
+      });
+    },
+    [uploadToDatabase],
+  );
+
   const fCons = useMemo(
     () => filterByDateRange(cons, dateFrom, dateTo),
     [cons, dateFrom, dateTo],
@@ -278,8 +293,10 @@ export function useDashboardController() {
     saveStatus,
     isRestoring,
     incrementalStatus,
+    reprocessStatus,
     fileRef,
     incrementalFileRef,
+    reprocessFileRef,
     fCons,
     fAtend,
     fTickets,
@@ -299,6 +316,7 @@ export function useDashboardController() {
     setSaveStatus,
     handleFile,
     handleIncrementalFile,
+    handleReprocessFile,
     handleDrop,
     retryLoadFromDatabase,
   };

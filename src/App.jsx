@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { fmtSec, fmtPct, isErroApp, isTransferencia } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
@@ -173,7 +173,7 @@ function Section({ title, icon, children }) {
   );
 }
 
-function Table({ headers, rows }) {
+function Table({ headers, rows, onRowClick, selectedRowIndex }) {
   return (
     <div
       style={{
@@ -212,7 +212,16 @@ function Table({ headers, rows }) {
           {rows.map((row, ri) => (
             <tr
               key={ri}
-              style={{ background: ri % 2 === 0 ? "transparent" : P.card }}
+              onClick={() => onRowClick?.(ri, row)}
+              style={{
+                background:
+                  selectedRowIndex === ri
+                    ? `${P.accent}22`
+                    : ri % 2 === 0
+                      ? "transparent"
+                      : P.card,
+                cursor: onRowClick ? "pointer" : "default",
+              }}
             >
               {row.map((cell, ci) => (
                 <td
@@ -323,6 +332,9 @@ function TabBtn({ id, icon, label, activeTab, onSelect }) {
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [pendingTicketListScroll, setPendingTicketListScroll] = useState(false);
+  const ticketListSectionRef = useRef(null);
 
   useEffect(() => {
     window.localStorage.setItem("theme-mode", themeMode);
@@ -340,8 +352,10 @@ export default function App() {
     saveStatus,
     isRestoring,
     incrementalStatus,
+    reprocessStatus,
     fileRef,
     incrementalFileRef,
+    reprocessFileRef,
     fCons,
     fAtend,
     fTickets,
@@ -360,6 +374,7 @@ export default function App() {
     setMetricSel,
     handleFile,
     handleIncrementalFile,
+    handleReprocessFile,
     handleDrop,
     retryLoadFromDatabase,
   } = useDashboardController();
@@ -393,8 +408,28 @@ export default function App() {
 
   function handleTicketDrilldown(filterKey) {
     setTicketListFilterSel(filterKey || "todos");
+    setSelectedTicket(null);
+    setPendingTicketListScroll(true);
     setTab("tickets");
   }
+
+  function fmtDateTime(value) {
+    if (!value) return "-";
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString("pt-BR");
+  }
+
+  useEffect(() => {
+    if (tab !== "tickets" || !pendingTicketListScroll) return;
+    requestAnimationFrame(() => {
+      ticketListSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setPendingTicketListScroll(false);
+    });
+  }, [tab, pendingTicketListScroll]);
 
   if (!loaded) {
     return (
@@ -966,81 +1001,97 @@ export default function App() {
                 />
               </div>
             </Section>
-            <Section
-              title={`Lista de Tickets · ${ticketFilterLabel}`}
-              icon="🧾"
-            >
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  flexWrap: "wrap",
-                  marginBottom: 10,
-                }}
+            <div ref={ticketListSectionRef}>
+              <Section
+                title={`Lista de Tickets · ${ticketFilterLabel}`}
+                icon="🧾"
               >
-                {[
-                  { key: "todos", label: "Todos" },
-                  { key: "abertos", label: "Abertos" },
-                  { key: "fechados", label: "Fechados" },
-                  { key: "erros", label: "Erros/App" },
-                  { key: "transferencias", label: "Transferências" },
-                  { key: "outros", label: "Outros" },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setTicketListFilterSel(opt.key)}
-                    style={{
-                      padding: "4px 10px",
-                      border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
-                      borderRadius: 18,
-                      background:
-                        ticketListFilterSel === opt.key
-                          ? `${P.accent}22`
-                          : "transparent",
-                      color: ticketListFilterSel === opt.key ? P.accent : P.dim,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {filteredTicketsList.length === 0 ? (
                 <div
                   style={{
-                    padding: 18,
-                    textAlign: "center",
-                    color: P.green,
-                    background: P.card,
-                    borderRadius: 12,
-                    border: `1px solid ${P.bdr}`,
+                    display: "flex",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    marginBottom: 10,
                   }}
                 >
-                  Nenhum ticket para o filtro selecionado.
+                  {[
+                    { key: "todos", label: "Todos" },
+                    { key: "abertos", label: "Abertos" },
+                    { key: "fechados", label: "Fechados" },
+                    { key: "erros", label: "Erros/App" },
+                    { key: "transferencias", label: "Transferências" },
+                    { key: "outros", label: "Outros" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        setTicketListFilterSel(opt.key);
+                        setSelectedTicket(null);
+                      }}
+                      style={{
+                        padding: "4px 10px",
+                        border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
+                        borderRadius: 18,
+                        background:
+                          ticketListFilterSel === opt.key
+                            ? `${P.accent}22`
+                            : "transparent",
+                        color:
+                          ticketListFilterSel === opt.key ? P.accent : P.dim,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <Table
-                  headers={[
-                    "Chamado",
-                    "Título",
-                    "Status",
-                    "Responsável",
-                    "Severidade",
-                    "Categoria",
-                  ]}
-                  rows={filteredTicketsList.map((t) => [
-                    t.chamado,
-                    t.titulo.slice(0, 45),
-                    t.status,
-                    t.responsavel.split(" ").slice(0, 2).join(" "),
-                    t.severidade,
-                    t.categoria,
-                  ])}
-                />
-              )}
-            </Section>
+                {filteredTicketsList.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 18,
+                      textAlign: "center",
+                      color: P.green,
+                      background: P.card,
+                      borderRadius: 12,
+                      border: `1px solid ${P.bdr}`,
+                    }}
+                  >
+                    Nenhum ticket para o filtro selecionado.
+                  </div>
+                ) : (
+                  <Table
+                    headers={[
+                      "Chamado",
+                      "Título",
+                      "Status",
+                      "Responsável",
+                      "Severidade",
+                      "Categoria",
+                    ]}
+                    rows={filteredTicketsList.map((t) => [
+                      t.chamado,
+                      t.titulo.slice(0, 45),
+                      t.status,
+                      t.responsavel.split(" ").slice(0, 2).join(" "),
+                      t.severidade,
+                      t.categoria,
+                    ])}
+                    onRowClick={(idx) =>
+                      setSelectedTicket(filteredTicketsList[idx])
+                    }
+                    selectedRowIndex={
+                      selectedTicket
+                        ? filteredTicketsList.findIndex(
+                            (t) => t.chamado === selectedTicket.chamado,
+                          )
+                        : -1
+                    }
+                  />
+                )}
+              </Section>
+            </div>
           </>
         )}
 
@@ -1378,11 +1429,228 @@ export default function App() {
                     }
                   }}
                 />
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    borderTop: `1px solid ${P.bdr}`,
+                    paddingTop: 14,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: P.dim,
+                      margin: "0 0 10px",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Reprocessar completo (upsert): atualiza registros ja
+                    existentes, incluindo campos como trâmites e descrição.
+                  </p>
+
+                  <div
+                    onClick={() => reprocessFileRef.current?.click()}
+                    style={{
+                      border: `2px dashed ${P.bdr}`,
+                      borderRadius: 12,
+                      padding: "22px 18px",
+                      cursor: "pointer",
+                      background: P.card,
+                      textAlign: "center",
+                      transition: "all .2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = P.orange;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = P.bdr;
+                    }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>♻️</div>
+                    <div
+                      style={{ color: P.text, fontWeight: 600, fontSize: 13 }}
+                    >
+                      Reprocessar base completa
+                    </div>
+                    <div style={{ color: P.dim, fontSize: 11, marginTop: 4 }}>
+                      Use o mesmo arquivo consolidado (.xlsx/.xls)
+                    </div>
+                  </div>
+
+                  {reprocessStatus.state !== "idle" && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 12,
+                        color:
+                          reprocessStatus.state === "success"
+                            ? P.green
+                            : reprocessStatus.state === "error"
+                              ? P.red
+                              : P.dim,
+                      }}
+                    >
+                      {reprocessStatus.message}
+                    </div>
+                  )}
+
+                  <input
+                    ref={reprocessFileRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      if (e.target.files[0]) {
+                        handleReprocessFile(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </Section>
           </>
         )}
       </div>
+
+      {selectedTicket && (
+        <div
+          onClick={() => setSelectedTicket(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#0008",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(980px, 100%)",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              background: P.card,
+              border: `1px solid ${P.bdr}`,
+              borderRadius: 12,
+              padding: 14,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: P.text,
+                  fontWeight: 700,
+                }}
+              >
+                Detalhes do Ticket {selectedTicket.chamado}
+              </h3>
+              <button
+                onClick={() => setSelectedTicket(null)}
+                style={{
+                  border: `1px solid ${P.bdr}`,
+                  background: "transparent",
+                  color: P.dim,
+                  borderRadius: 6,
+                  fontSize: 11,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 8,
+                fontSize: 12,
+              }}
+            >
+              <div>
+                <b>Status:</b> {selectedTicket.status || "-"}
+              </div>
+              <div>
+                <b>Abertura:</b>{" "}
+                {fmtDateTime(
+                  selectedTicket.dataAbertura || selectedTicket.dateReal,
+                )}
+              </div>
+              <div>
+                <b>Fechamento:</b> {fmtDateTime(selectedTicket.dataFechamento)}
+              </div>
+              <div>
+                <b>Responsável:</b> {selectedTicket.responsavel || "-"}
+              </div>
+              <div>
+                <b>Severidade:</b> {selectedTicket.severidade || "-"}
+              </div>
+              <div>
+                <b>Categoria:</b> {selectedTicket.categoria || "-"}
+              </div>
+              <div>
+                <b>Categoria Raw:</b> {selectedTicket.categoriaRaw || "-"}
+              </div>
+              <div>
+                <b>Natureza:</b> {selectedTicket.natureza || "-"}
+              </div>
+              <div>
+                <b>Qualificação:</b> {selectedTicket.qualificacao || "-"}
+              </div>
+              <div>
+                <b>Cliente:</b> {selectedTicket.cliente || "-"}
+              </div>
+              <div>
+                <b>Módulo:</b> {selectedTicket.modulo || "-"}
+              </div>
+              <div>
+                <b>Tempo Chamado:</b> {selectedTicket.tempoChamadoRaw || "-"}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, color: P.text }}>
+              <b>Título:</b>
+              <div style={{ marginTop: 4, color: P.dim }}>
+                {selectedTicket.titulo || "-"}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, color: P.text }}>
+              <b>Trâmites:</b>
+              <div
+                style={{ marginTop: 4, color: P.dim, whiteSpace: "pre-wrap" }}
+              >
+                {selectedTicket.tramites || "-"}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, color: P.text }}>
+              <b>Descrição:</b>
+              <div
+                style={{ marginTop: 4, color: P.dim, whiteSpace: "pre-wrap" }}
+              >
+                {selectedTicket.descricao || "-"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
