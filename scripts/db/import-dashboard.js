@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DEFAULT_DB_PATH } from "./db.js";
+import process from "node:process";
+import { DEFAULT_DB_PATH, PROJECT_ROOT } from "./db.js";
 import { importDashboardToSqlite } from "./import-service.js";
 
 function getArgValue(flag, fallback = null) {
@@ -15,7 +16,7 @@ function getPositionalPath() {
 
 function main() {
   const defaultInput = path.resolve(
-    process.cwd(),
+    PROJECT_ROOT,
     "data/input/Dashboard_-_Central.xlsx",
   );
 

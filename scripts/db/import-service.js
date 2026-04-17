@@ -228,21 +228,25 @@ export function importDashboardToSqlite({
     };
   });
 
-  trx(parsed);
+  try {
+    trx(parsed);
 
-  return {
-    dbPath: resolvedDb,
-    inputFile: resolvedInput,
-    referenceYear,
-    mode: onlyNew ? "only-new" : "upsert-all",
-    consRows: counters?.imported.cons ?? 0,
-    atendRows: counters?.imported.atend ?? 0,
-    ticketRows: counters?.imported.tickets ?? 0,
-    sourceConsRows: counters?.source.cons ?? 0,
-    sourceAtendRows: counters?.source.atend ?? 0,
-    sourceTicketRows: counters?.source.tickets ?? 0,
-    skippedConsRows: counters?.skipped.cons ?? 0,
-    skippedAtendRows: counters?.skipped.atend ?? 0,
-    skippedTicketRows: counters?.skipped.tickets ?? 0,
-  };
+    return {
+      dbPath: resolvedDb,
+      inputFile: resolvedInput,
+      referenceYear,
+      mode: onlyNew ? "only-new" : "upsert-all",
+      consRows: counters?.imported.cons ?? 0,
+      atendRows: counters?.imported.atend ?? 0,
+      ticketRows: counters?.imported.tickets ?? 0,
+      sourceConsRows: counters?.source.cons ?? 0,
+      sourceAtendRows: counters?.source.atend ?? 0,
+      sourceTicketRows: counters?.source.tickets ?? 0,
+      skippedConsRows: counters?.skipped.cons ?? 0,
+      skippedAtendRows: counters?.skipped.atend ?? 0,
+      skippedTicketRows: counters?.skipped.tickets ?? 0,
+    };
+  } finally {
+    db.close();
+  }
 }

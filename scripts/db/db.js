@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { hashPassword } from "./auth.js";
 
+const DB_MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+export const PROJECT_ROOT = path.resolve(DB_MODULE_DIR, "../..");
+
 export const DEFAULT_DB_PATH = path.resolve(
-  process.cwd(),
+  PROJECT_ROOT,
   "data/sqlite/central_relacionamentos.db",
 );
 

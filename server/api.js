@@ -4,7 +4,7 @@ import process from "node:process";
 import express from "express";
 import multer from "multer";
 import { importDashboardToSqlite } from "../scripts/db/import-service.js";
-import { ensureSchema, openDatabase } from "../scripts/db/db.js";
+import { PROJECT_ROOT, ensureSchema, openDatabase } from "../scripts/db/db.js";
 import {
   createSessionToken,
   hashPassword,
@@ -13,7 +13,7 @@ import {
 
 const app = express();
 const PORT = Number.parseInt(process.env.API_PORT || "8787", 10);
-const uploadDir = path.resolve(process.cwd(), "data/input/uploads");
+const uploadDir = path.resolve(PROJECT_ROOT, "data/input/uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 const sessions = new Map();
 
