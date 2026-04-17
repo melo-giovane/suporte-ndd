@@ -25,6 +25,7 @@ Dominio: Central de Relacionamentos (telefonia Atplus + tickets Ellevo), com ent
 1. Frontend (React + Recharts)
 
 - arquivo principal: `src/App.jsx`
+- aba resumo (lazy): `src/tabs/ResumoTab.jsx`
 - controlador: `src/controllers/useDashboardController.js`
 - regras/modelo: `src/models/dashboardModel.js`
 - utilitarios: `src/utils.js`
@@ -53,6 +54,7 @@ Dominio: Central de Relacionamentos (telefonia Atplus + tickets Ellevo), com ent
 central-relacionamentos/
   src/
     App.jsx
+    tabs/ResumoTab.jsx
     controllers/useDashboardController.js
     models/dashboardModel.js
     utils.js
@@ -97,6 +99,7 @@ Modo incremental:
 - navegacao: `tab`
 - status de persistencia: `saveStatus`, `incrementalStatus`
 - carregamento de banco: `isRestoring`
+- upload local: parse de workbook via import dinamico de `xlsx` (lazy)
 
 ### 4.2 Calculos e agregacoes (model)
 
@@ -190,9 +193,24 @@ npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
 - regras de categorizacao e mapeamento de agentes sao estaticas em codigo.
 - parsing de datas pt-BR sem ano depende de ano de referencia enviado/assumido.
 
+## 9. Atualizacoes recentes (16/04/2026)
+
+- Indicadores da aba Resumo ajustados em Telefonia:
+  - card de chamadas com foco em atendidas
+  - taxa alterada para abandono/nao atendidas
+- Novo card duplicado de evolucao diaria na aba Resumo:
+  - serie por tipo de ticket (Transferencias, Erros no App, Outros)
+  - filtro por atendente (Equipe toda ou individual)
+- Otimizacao de bundle:
+  - `xlsx` removido do bundle inicial com import dinamico no controller
+  - aba Resumo extraida para `src/tabs/ResumoTab.jsx` com lazy loading via `React.lazy`
+- Efeito esperado:
+  - melhor tempo de carregamento inicial
+  - primeiro acesso a Resumo pode exibir fallback curto de carregamento
+
 ---
 
-## 9. Resumo da Evolucao para v2
+## 10. Resumo da Evolucao para v2
 
 Comparado ao desenho anterior, o sistema agora:
 
@@ -200,29 +218,26 @@ Comparado ao desenho anterior, o sistema agora:
 - possui API para ingestao e restauracao de dados;
 - grava historico em SQLite com importacao idempotente;
 - suporta rotina de atualizacao diaria sem duplicar dados.
-  | **Qualificação** | Classificação secundária detalhada do ticket |
-  | **Severidade** | Nível de urgência: Nível 1 (baixa), Nível 2 (média), Nível 3 (alta) |
 
 ---
 
-## 14. INSTRUÇÕES PARA EDIÇÃO CONTÍNUA
+## 14. INSTRUCOES PARA EDICAO CONTINUA
 
-Ao modificar o `App.jsx`:
+Ao modificar o frontend:
 
-1. **Mantenha o single-file** — tudo em um único arquivo `.jsx` para funcionar como artifact React
-2. **Não use localStorage/sessionStorage** — não funciona no ambiente de artifacts
-3. **Libs disponíveis**: React, Recharts, SheetJS (xlsx), lodash, d3, Three.js, Papaparse, shadcn/ui, Chart.js, Tone, mammoth, tensorflow, lucide-react, MathJS, Plotly
-4. **Tailwind**: apenas classes core utilities (sem compilador)
-5. **CSS**: inline styles (padrão atual do app)
-6. **Export**: deve ter `export default function App()`
-7. **Sem props obrigatórios** no componente raiz
-8. **Imagens/assets**: não há acesso a assets externos além de CDN pública
+1. Mantenha `src/App.jsx` como shell de navegacao e layout principal.
+2. Prefira extrair blocos grandes de UI para componentes em `src/tabs/` para facilitar code splitting.
+3. Preserve lazy loading nas abas pesadas (ex.: Resumo) para evitar aumento do bundle inicial.
+4. Evite imports pesados no topo do App/controller quando houver opcao de import dinamico.
+5. Mantenha estilos inline como padrao atual do projeto.
+6. Nao quebre as assinaturas principais de dados vindas de `useDashboardController`.
+7. Sempre validar com `npm run build` apos mudancas estruturais.
 
 ### Para adicionar nova fonte de dados (ex: CSV direto):
 
 - Use `Papaparse` para parse de CSV
-- Mantenha o padrão de state: `const [novosDados, setNovosDados] = useState([])`
-- Aplique o mesmo filtro de datas via `inRange()`
+- Mantenha o padrao de state no controller (`useDashboardController`)
+- Aplique o mesmo filtro de datas da funcao `filterByDateRange`
 
 ### Para adicionar novo agente:
 

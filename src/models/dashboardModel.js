@@ -146,6 +146,7 @@ export function buildKpis(fCons, fTickets) {
     tma,
     tme,
     txAt: tc ? ta / tc : 0,
+    txAband: tc ? tab / tc : 0,
     tkt: fTickets.length,
     tktF: fTickets.filter((t) => t.status === "Fechado").length,
     tktA: fTickets.filter((t) => t.status === "Aberto").length,

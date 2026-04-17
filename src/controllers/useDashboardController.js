@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   aggregateBy,
   buildDailyChart,
@@ -13,6 +12,14 @@ const API_BASE = import.meta.env.DEV ? "http://localhost:8787" : "";
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
+}
+
+let xlsxModulePromise;
+function loadXlsxModule() {
+  if (!xlsxModulePromise) {
+    xlsxModulePromise = import("xlsx");
+  }
+  return xlsxModulePromise;
 }
 
 export function useDashboardController() {
@@ -160,17 +167,25 @@ export function useDashboardController() {
   const handleFile = useCallback(
     (file) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const workbook = XLSX.read(e.target.result, {
-          type: "array",
-          cellDates: true,
-        });
+      reader.onload = async (e) => {
+        try {
+          const XLSX = await loadXlsxModule();
+          const workbook = XLSX.read(e.target.result, {
+            type: "array",
+            cellDates: true,
+          });
 
-        const parsed = parseWorkbookData(XLSX, workbook);
-        setCons(parsed.cons);
-        setAtend(parsed.atend);
-        setTickets(parsed.tickets);
-        setLoaded(true);
+          const parsed = parseWorkbookData(XLSX, workbook);
+          setCons(parsed.cons);
+          setAtend(parsed.atend);
+          setTickets(parsed.tickets);
+          setLoaded(true);
+        } catch {
+          setSaveStatus({
+            state: "error",
+            message: "Falha ao processar o arquivo no navegador.",
+          });
+        }
       };
       reader.readAsArrayBuffer(file);
 

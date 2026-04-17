@@ -128,6 +128,8 @@ app.get("/api/dashboard-data", (_, res) => {
 });
 
 app.post("/api/import-dashboard", upload.single("file"), (req, res) => {
+  let targetPath = null;
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -152,7 +154,7 @@ app.post("/api/import-dashboard", upload.single("file"), (req, res) => {
       });
     }
 
-    const targetPath = path.resolve(
+    targetPath = path.resolve(
       uploadDir,
       `${Date.now()}_${req.file.originalname}`,
     );
@@ -169,6 +171,19 @@ app.post("/api/import-dashboard", upload.single("file"), (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : "Erro desconhecido",
+    });
+  } finally {
+    const pathsToCleanup = [targetPath, req.file?.path].filter(Boolean);
+    const uniquePaths = [...new Set(pathsToCleanup)];
+
+    uniquePaths.forEach((filePath) => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch {
+        // Falha na limpeza não deve quebrar a resposta da API.
+      }
     });
   }
 });

@@ -5,6 +5,18 @@ Dashboard React para analise operacional da Central de Relacionamentos (telefoni
 - Versao atual: `2.0.0`
 - Autor: `Giovane Melo`
 
+## Novidades recentes
+
+- Aba Resumo com novo card de evolucao diaria por tipo de ticket:
+  - filtros por tipo: Transferencias, Erros no App, Outros
+  - filtro por atendente: Equipe toda ou pessoa especifica
+- Indicadores de telefonia na aba Resumo ajustados:
+  - card de chamadas com foco em atendidas
+  - taxa exibida como abandono/nao atendidas
+- Otimizacoes de performance no frontend:
+  - import dinamico de `xlsx` (carrega apenas ao processar planilha)
+  - aba Resumo extraida para chunk lazy (`src/tabs/ResumoTab.jsx`)
+
 ## Aplicacao web
 
 ```bash
@@ -56,6 +68,21 @@ npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
 - `scripts/db/parser.js`: parser do layout documentado nos arquivos `.md`
 - `data/sqlite/`: banco local (`*.db`, ignorado no Git)
 - `data/input/`: pasta de entrada para arquivo diario
+
+## Estrutura frontend (resumo)
+
+- `src/App.jsx`: shell da aplicacao, navegacao por abas e layout principal
+- `src/tabs/ResumoTab.jsx`: conteudo da aba Resumo (carregado com lazy import)
+- `src/controllers/useDashboardController.js`: estado principal, filtros e integracao API
+- `src/models/dashboardModel.js`: parse e agregacoes de negocio
+- `src/utils.js`: funcoes utilitarias e normalizacao
+
+## Observacoes de performance
+
+- O bundle inicial foi reduzido com code splitting:
+  - parser XLSX saiu do carregamento inicial
+  - aba Resumo virou chunk sob demanda
+- Primeiro acesso a aba Resumo pode mostrar fallback curto de carregamento.
 
 ## Documentacao
 

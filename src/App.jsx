@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { fmtSec, fmtPct } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
@@ -99,6 +99,7 @@ const INITIAL_THEME_MODE =
 
 let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
 let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
+const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
 
 function KPI({ label, value, sub, color, icon }) {
   return (
@@ -682,478 +683,44 @@ export default function App() {
         </div>
 
         {tab === "resumo" && (
-          <>
-            <Section title="Telefonia" icon="📞">
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <KPI
-                  icon="📞"
-                  label="Chamadas"
-                  value={kpis.tc}
-                  sub={`${kpis.ta} atendidas`}
-                  color={P.accent}
-                />
-                <KPI
-                  icon="✅"
-                  label="Tx Atendimento"
-                  value={fmtPct(kpis.txAt)}
-                  sub={kpis.txAt >= 0.9 ? "Meta atingida" : "Abaixo da meta"}
-                  color={kpis.txAt >= 0.9 ? P.green : P.red}
-                />
-                <KPI
-                  icon="⚠️"
-                  label="Aband+Não At."
-                  value={kpis.tab}
-                  color={P.orange}
-                />
-                <KPI
-                  icon="⏱"
-                  label="TMA Médio"
-                  value={fmtSec(kpis.tma)}
-                  color={P.orange}
-                />
-                <KPI
-                  icon="⏳"
-                  label="TME Médio"
-                  value={fmtSec(kpis.tme)}
-                  color={P.cyan}
-                />
-              </div>
-            </Section>
-            <Section title="Tickets (derivados das ligações)" icon="🎫">
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <KPI
-                  icon="🎫"
-                  label="Total"
-                  value={kpis.tkt}
-                  color={P.purple}
-                />
-                <KPI
-                  icon="🟢"
-                  label="Fechados"
-                  value={kpis.tktF}
-                  color={P.green}
-                />
-                <KPI
-                  icon="🔴"
-                  label="Abertos"
-                  value={kpis.tktA}
-                  color={kpis.tktA > 5 ? P.red : P.orange}
-                />
-                <KPI
-                  icon="📅"
-                  label="Dias"
-                  value={kpis.dias}
-                  color={P.accent}
-                />
-                <KPI
-                  icon="📈"
-                  label="Méd Chamadas/Dia"
-                  value={kpis.dias ? (kpis.tc / kpis.dias).toFixed(1) : "0"}
-                  color={P.cyan}
-                />
-                <KPI
-                  icon="🔄"
-                  label="Transferências"
-                  value={kpis.tktTransf}
-                  color={P.accent}
-                />
-                <KPI
-                  icon="🐛"
-                  label="Erros/App"
-                  value={kpis.tktErros}
-                  color={P.red}
-                />
-              </div>
-            </Section>
-            {(() => {
-              const METRICS = [
-                {
-                  key: "Total",
-                  label: "Total Chamadas",
-                  color: P.accent,
-                  pct: false,
-                },
-                {
-                  key: "Atendidas",
-                  label: "Atendidas",
-                  color: P.green,
-                  pct: false,
-                },
-                {
-                  key: "Tx Atend",
-                  label: "Tx Atend.",
-                  color: P.cyan,
-                  pct: true,
-                },
-                { key: "TMA", label: "TMA (seg)", color: P.orange, pct: false },
-                { key: "TME", label: "TME (seg)", color: P.purple, pct: false },
-              ];
-              const m = METRICS.find((x) => x.key === metricSel) || METRICS[0];
-              return (
-                <div style={{ marginTop: 18 }}>
-                  <div
-                    style={{
-                      background: P.card,
-                      borderRadius: 14,
-                      border: `1px solid ${P.bdr}`,
-                      padding: "14px 14px 10px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        flexWrap: "wrap",
-                        gap: 8,
-                        marginBottom: 12,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: P.dim,
-                          textTransform: "uppercase",
-                          letterSpacing: 1,
-                        }}
-                      >
-                        Evolução Diária
-                      </span>
-                      <div
-                        style={{ display: "flex", gap: 5, flexWrap: "wrap" }}
-                      >
-                        {METRICS.map(({ key, label, color }) => (
-                          <button
-                            key={key}
-                            onClick={() => setMetricSel(key)}
-                            style={{
-                              padding: "4px 12px",
-                              border: `1px solid ${metricSel === key ? color : P.bdr}`,
-                              borderRadius: 20,
-                              cursor: "pointer",
-                              background:
-                                metricSel === key
-                                  ? color + "22"
-                                  : "transparent",
-                              color: metricSel === key ? color : P.dim,
-                              fontSize: 10,
-                              fontWeight: 600,
-                              transition: "all .15s",
-                            }}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ height: 240 }}>
-                      <ResponsiveContainer>
-                        <LineChart data={dailyChart}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                          <XAxis
-                            dataKey="dia"
-                            tick={{ fill: P.dim, fontSize: 9 }}
-                            interval={Math.max(
-                              0,
-                              Math.floor(dailyChart.length / 12),
-                            )}
-                          />
-                          <YAxis
-                            tick={{ fill: P.dim, fontSize: 10 }}
-                            domain={m.pct ? [0, 1] : ["auto", "auto"]}
-                            tickFormatter={m.pct ? (v) => fmtPct(v) : undefined}
-                          />
-                          <Tooltip content={<TT />} />
-                          <Line
-                            type="monotone"
-                            dataKey={m.key}
-                            stroke={m.color}
-                            strokeWidth={2}
-                            dot={{ r: 2, fill: m.color }}
-                            activeDot={{ r: 4 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-            <div
-              style={{
-                display: "flex",
-                gap: 14,
-                flexWrap: "wrap",
-                marginTop: 14,
-              }}
-            >
-              <ChartCard title="Tickets por Categoria">
-                <ResponsiveContainer>
-                  <PieChart>
-                    <Pie
-                      data={catData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      innerRadius={35}
-                      paddingAngle={1}
-                      label={({ name, value }) => `${name}: ${value}`}
-                      style={{ fontSize: 9 }}
-                    >
-                      {catData.map((_, i) => (
-                        <Cell key={i} fill={PIE_C[i % PIE_C.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<TT />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ChartCard>
-              <ChartCard title="Tickets por Severidade">
-                <ResponsiveContainer>
-                  <BarChart data={sevData} layout="vertical" barSize={22}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                    <XAxis type="number" tick={{ fill: P.dim, fontSize: 10 }} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fill: P.dim, fontSize: 10 }}
-                      width={65}
-                    />
-                    <Tooltip content={<TT />} />
-                    <Bar
-                      dataKey="value"
-                      fill={P.purple}
-                      radius={[0, 4, 4, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-            <Section title="Visão por Atendente" icon="👥">
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                <ChartCard title="Produtividade: Chamadas + Tickets" h={260}>
-                  <ResponsiveContainer>
-                    <BarChart data={equipe} barGap={2}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                      <XAxis
-                        dataKey="nome"
-                        tick={{ fill: P.dim, fontSize: 10 }}
-                      />
-                      <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                      <Tooltip content={<TT />} />
-                      <Bar
-                        dataKey="chamAtend"
-                        name="Chamadas"
-                        fill={P.accent}
-                        radius={[4, 4, 0, 0]}
-                        stackId="a"
-                      />
-                      <Bar
-                        dataKey="tickets"
-                        name="Tickets"
-                        fill={P.purple}
-                        radius={[4, 4, 0, 0]}
-                        stackId="a"
-                      />
-                      <Legend wrapperStyle={{ fontSize: 10 }} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-                <ChartCard title="TMA por Atendente (seg)" h={260}>
-                  <ResponsiveContainer>
-                    <BarChart
-                      data={equipe.filter((e) => e.tma > 0)}
-                      barSize={32}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                      <XAxis
-                        dataKey="nome"
-                        tick={{ fill: P.dim, fontSize: 10 }}
-                      />
-                      <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                      <Tooltip content={<TT />} />
-                      <Bar
-                        dataKey="tma"
-                        name="TMA(s)"
-                        fill={P.orange}
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-              </div>
+          <Suspense
+            fallback={
               <div
                 style={{
-                  display: "flex",
-                  gap: 14,
-                  flexWrap: "wrap",
-                  marginTop: 14,
+                  background: P.card,
+                  border: `1px solid ${P.bdr}`,
+                  borderRadius: 12,
+                  padding: 14,
+                  color: P.dim,
+                  fontSize: 12,
                 }}
               >
-                <div
-                  style={{
-                    background: P.card,
-                    borderRadius: 14,
-                    border: `1px solid ${P.bdr}`,
-                    padding: "14px 14px 6px",
-                    flex: "1 1 340px",
-                    minWidth: 300,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: 10,
-                      flexWrap: "wrap",
-                      gap: 6,
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        color: P.dim,
-                        textTransform: "uppercase",
-                        letterSpacing: 1,
-                      }}
-                    >
-                      Ligações · Transferências · Erros/App por Atendente
-                    </span>
-                    <div style={{ display: "flex", gap: 5 }}>
-                      {[
-                        { key: "lig", label: "Ligações", color: P.accent },
-                        {
-                          key: "transf",
-                          label: "Transferências",
-                          color: P.green,
-                        },
-                        { key: "erros", label: "Erros/App", color: P.red },
-                      ].map(({ key, label, color }) => (
-                        <button
-                          key={key}
-                          onClick={() =>
-                            setSeriesVis((v) => ({ ...v, [key]: !v[key] }))
-                          }
-                          style={{
-                            padding: "3px 10px",
-                            border: `1px solid ${seriesVis[key] ? color : P.bdr}`,
-                            borderRadius: 20,
-                            cursor: "pointer",
-                            background: seriesVis[key]
-                              ? color + "22"
-                              : "transparent",
-                            color: seriesVis[key] ? color : P.dim,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            transition: "all .15s",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ height: 280 }}>
-                    <ResponsiveContainer>
-                      <BarChart data={equipe} barGap={3} barCategoryGap="30%">
-                        <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                        <XAxis
-                          dataKey="nome"
-                          tick={{ fill: P.dim, fontSize: 10 }}
-                        />
-                        <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                        <Tooltip content={<TT />} />
-                        {seriesVis.lig && (
-                          <Bar
-                            dataKey="chamAtend"
-                            name="Ligações Atendidas"
-                            fill={P.accent}
-                            radius={[4, 4, 0, 0]}
-                          />
-                        )}
-                        {seriesVis.transf && (
-                          <Bar
-                            dataKey="transferencias"
-                            name="Transferências"
-                            fill={P.green}
-                            radius={[4, 4, 0, 0]}
-                          />
-                        )}
-                        {seriesVis.erros && (
-                          <Bar
-                            dataKey="errosApp"
-                            name="Erros/App"
-                            fill={P.red}
-                            radius={[4, 4, 0, 0]}
-                          />
-                        )}
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                Carregando resumo...
               </div>
-            </Section>
-            <Section title="Alertas" icon="🚨">
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {equipe
-                  .filter((e) => e.tktAbertos > 3)
-                  .map((e) => (
-                    <div
-                      key={e.nome + "t"}
-                      style={{
-                        background: P.redD,
-                        borderRadius: 10,
-                        padding: "10px 14px",
-                        fontSize: 12,
-                        color: P.text,
-                        border: `1px solid ${P.red}33`,
-                      }}
-                    >
-                      🔴 <b>{e.nome}</b> — <b>{e.tktAbertos}</b> tickets em
-                      aberto
-                    </div>
-                  ))}
-                {equipe
-                  .filter((e) => e.tma > 300)
-                  .map((e) => (
-                    <div
-                      key={e.nome + "m"}
-                      style={{
-                        background: P.orangeD,
-                        borderRadius: 10,
-                        padding: "10px 14px",
-                        fontSize: 12,
-                        color: P.text,
-                        border: `1px solid ${P.orange}33`,
-                      }}
-                    >
-                      ⏱ <b>{e.nome}</b> — TMA de <b>{fmtSec(e.tma)}</b> (acima
-                      de 5min)
-                    </div>
-                  ))}
-                {equipe.every((e) => e.tktAbertos <= 3 && e.tma <= 300) && (
-                  <div
-                    style={{
-                      background: P.greenD,
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      fontSize: 12,
-                      color: P.text,
-                      border: `1px solid ${P.green}33`,
-                    }}
-                  >
-                    ✅ Equipe dentro dos parâmetros.
-                  </div>
-                )}
-              </div>
-            </Section>
-          </>
+            }
+          >
+            <ResumoTab
+              P={P}
+              PIE_C={PIE_C}
+              KPI={KPI}
+              Section={Section}
+              ChartCard={ChartCard}
+              TT={TT}
+              fmtSec={fmtSec}
+              fmtPct={fmtPct}
+              kpis={kpis}
+              metricSel={metricSel}
+              setMetricSel={setMetricSel}
+              dailyChart={dailyChart}
+              fAtend={fAtend}
+              fTickets={fTickets}
+              catData={catData}
+              sevData={sevData}
+              equipe={equipe}
+              seriesVis={seriesVis}
+              setSeriesVis={setSeriesVis}
+            />
+          </Suspense>
         )}
 
         {tab === "telefonia" && (
