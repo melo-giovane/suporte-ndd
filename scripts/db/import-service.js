@@ -29,14 +29,15 @@ export function importDashboardToSqlite({
 
   const upsertCons = db.prepare(`
     INSERT INTO atplus_cons_daily (
-      data_key, data_label, date_real, fila,
+      data_key, data_label, date_real, hora, fila,
       total_chamadas, chamadas_atendidas, chamadas_capturadas,
       chamadas_nao_atendidas, chamadas_abandonadas, tx_abandono_na,
       tma_seg, tme_seg, source_file
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(data_key, fila) DO UPDATE SET
       data_label = excluded.data_label,
       date_real = excluded.date_real,
+      hora = excluded.hora,
       total_chamadas = excluded.total_chamadas,
       chamadas_atendidas = excluded.chamadas_atendidas,
       chamadas_capturadas = excluded.chamadas_capturadas,
@@ -51,13 +52,14 @@ export function importDashboardToSqlite({
 
   const upsertAtend = db.prepare(`
     INSERT INTO atplus_attendant_daily (
-      data_key, data_label, date_real, fila, ramal,
+      data_key, data_label, date_real, hora, fila, ramal,
       total_tentativas, tentativas_atendidas, tentativas_perdidas,
       chamadas_capturadas, tma_seg, tme_seg, source_file
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(data_key, fila, ramal) DO UPDATE SET
       data_label = excluded.data_label,
       date_real = excluded.date_real,
+      hora = excluded.hora,
       total_tentativas = excluded.total_tentativas,
       tentativas_atendidas = excluded.tentativas_atendidas,
       tentativas_perdidas = excluded.tentativas_perdidas,
@@ -151,6 +153,7 @@ export function importDashboardToSqlite({
         row.dataKey,
         row.dataLabel,
         row.dateReal,
+        row.hora,
         row.fila,
         row.totalChamadas,
         row.chamadasAtendidas,
@@ -169,6 +172,7 @@ export function importDashboardToSqlite({
         row.dataKey,
         row.dataLabel,
         row.dateReal,
+        row.hora,
         row.fila,
         row.ramal,
         row.totalTentativas,

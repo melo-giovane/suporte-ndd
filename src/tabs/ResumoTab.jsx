@@ -29,6 +29,7 @@ export default function ResumoTab({
   metricSel,
   setMetricSel,
   dailyChart,
+  fCons,
   fAtend,
   fTickets,
   catData,
@@ -52,7 +53,50 @@ export default function ResumoTab({
   );
 
   const dailyCallsEvolution = useMemo(() => {
-    if (dailyCallsAgentSel === "__ALL__") return dailyChart;
+    if (dailyCallsAgentSel === "__ALL__") {
+      const byDay = new Map();
+
+      fCons.forEach((c) => {
+        const d = c.dateReal;
+        if (!d || Number.isNaN(d.getTime())) return;
+
+        const y = d.getFullYear();
+        const m = `${d.getMonth() + 1}`.padStart(2, "0");
+        const day = `${d.getDate()}`.padStart(2, "0");
+        const key = `${y}-${m}-${day}`;
+
+        if (!byDay.has(key)) {
+          byDay.set(key, {
+            dia: `${day}/${m}`,
+            Total: 0,
+            Atendidas: 0,
+            TMA: 0,
+            TME: 0,
+            _rows: 0,
+          });
+        }
+
+        const acc = byDay.get(key);
+        acc.Total += c.total || 0;
+        acc.Atendidas += c.atendidas || 0;
+        acc.TMA += c.tma || 0;
+        acc.TME += c.tme || 0;
+        acc._rows += 1;
+      });
+
+      const consolidated = Array.from(byDay.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([, value]) => ({
+          dia: value.dia,
+          Total: value.Total,
+          Atendidas: value.Atendidas,
+          TMA: value._rows ? Math.round(value.TMA / value._rows) : 0,
+          TME: value._rows ? Math.round(value.TME / value._rows) : 0,
+          "Tx Atend": value.Total ? value.Atendidas / value.Total : 0,
+        }));
+
+      return consolidated.length > 0 ? consolidated : dailyChart;
+    }
 
     const byDay = new Map();
     fAtend.forEach((a) => {
@@ -94,7 +138,7 @@ export default function ResumoTab({
         TME: value._rows ? Math.round(value.TME / value._rows) : 0,
         "Tx Atend": value.Total ? value.Atendidas / value.Total : 0,
       }));
-  }, [dailyCallsAgentSel, dailyChart, fAtend]);
+  }, [dailyCallsAgentSel, dailyChart, fAtend, fCons]);
 
   const atendenteOptions = useMemo(
     () =>

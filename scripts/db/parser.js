@@ -24,13 +24,16 @@ function parseIntSafe(value) {
 function parseNumberSafe(value) {
   if (value === null || value === undefined || value === "") return 0;
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const normalized = String(value)
+  const raw = String(value).trim();
+  const hasPercent = raw.includes("%");
+  const normalized = raw
     .trim()
     .replace(/\s+/g, "")
     .replace("%", "")
     .replace(",", ".");
   const n = Number.parseFloat(normalized);
-  return Number.isFinite(n) ? n : 0;
+  if (!Number.isFinite(n)) return 0;
+  return hasPercent ? n / 100 : n;
 }
 
 function parseSec(value) {
@@ -53,6 +56,59 @@ function parseDatePt(value, referenceYear) {
   const d = new Date(referenceYear, month - 1, day);
   if (Number.isNaN(d.getTime())) return null;
   return d;
+}
+
+function parseAtplusDateHour(value, referenceYear) {
+  if (!value && value !== 0) {
+    return { date: null, hour: null, isCsv: false };
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return {
+      date: new Date(value.getFullYear(), value.getMonth(), value.getDate()),
+      hour: value.getHours(),
+      isCsv: true,
+    };
+  }
+
+  const txt = String(value).trim().replace(/\xa0/g, " ");
+  const csv = txt.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2})(?::\d{1,2})?)?$/,
+  );
+
+  if (csv) {
+    const day = Number.parseInt(csv[1], 10);
+    const month = Number.parseInt(csv[2], 10);
+    const year = Number.parseInt(csv[3], 10);
+    const hour = csv[4] == null ? null : Number.parseInt(csv[4], 10);
+
+    const date = new Date(year, month - 1, day);
+    if (Number.isNaN(date.getTime())) {
+      return { date: null, hour: null, isCsv: true };
+    }
+
+    return {
+      date,
+      hour: Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null,
+      isCsv: true,
+    };
+  }
+
+  const legacyDate = parseDatePt(txt, referenceYear);
+  return {
+    date: legacyDate,
+    hour: null,
+    isCsv: false,
+  };
+}
+
+function buildAtplusDataKey({ dataLabel, date, isCsv, referenceYear }) {
+  if (isCsv) {
+    // Keep compatibility with previous imports that used a fallback key.
+    return `${referenceYear}:${dataLabel}`;
+  }
+
+  return toIsoDate(date) || `${referenceYear}:${dataLabel}`;
 }
 
 function toIsoDate(value) {
@@ -79,15 +135,20 @@ export function parseDashboardWorkbook(XLSX, workbook, referenceYear) {
         .sheet_to_json(wsCons, { header: 1, range: 3, raw: true })
         .filter((r) => r[0])
         .map((r) => {
-          const dataLabel = String(r[0]);
-          const dateReal = parseDatePt(dataLabel, referenceYear);
-          const dataKey =
-            toIsoDate(dateReal) || `${referenceYear}:${dataLabel}`;
+          const dataLabel = String(r[0]).trim();
+          const parsedDate = parseAtplusDateHour(dataLabel, referenceYear);
+          const dataKey = buildAtplusDataKey({
+            dataLabel,
+            date: parsedDate.date,
+            isCsv: parsedDate.isCsv,
+            referenceYear,
+          });
 
           return {
             dataKey,
             dataLabel,
-            dateReal: toIsoDate(dateReal),
+            dateReal: toIsoDate(parsedDate.date),
+            hora: parsedDate.hour,
             fila: String(r[1] || "").trim(),
             totalChamadas: parseIntSafe(r[2]),
             chamadasAtendidas: parseIntSafe(r[3]),
@@ -106,15 +167,20 @@ export function parseDashboardWorkbook(XLSX, workbook, referenceYear) {
         .sheet_to_json(wsAtend, { header: 1, range: 3, raw: true })
         .filter((r) => r[0] && r[2])
         .map((r) => {
-          const dataLabel = String(r[0]);
-          const dateReal = parseDatePt(dataLabel, referenceYear);
-          const dataKey =
-            toIsoDate(dateReal) || `${referenceYear}:${dataLabel}`;
+          const dataLabel = String(r[0]).trim();
+          const parsedDate = parseAtplusDateHour(dataLabel, referenceYear);
+          const dataKey = buildAtplusDataKey({
+            dataLabel,
+            date: parsedDate.date,
+            isCsv: parsedDate.isCsv,
+            referenceYear,
+          });
 
           return {
             dataKey,
             dataLabel,
-            dateReal: toIsoDate(dateReal),
+            dateReal: toIsoDate(parsedDate.date),
+            hora: parsedDate.hour,
             fila: String(r[1] || "").trim(),
             ramal: String(r[2] || "").trim(),
             totalTentativas: parseIntSafe(r[3]),

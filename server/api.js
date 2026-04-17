@@ -51,7 +51,7 @@ function computeTeamTotals(db) {
         COALESCE(SUM(chamadas_abandonadas + chamadas_nao_atendidas), 0) AS tab,
         CAST(ROUND(COALESCE(AVG(tma_seg), 0)) AS INTEGER) AS tma,
         CAST(ROUND(COALESCE(AVG(tme_seg), 0)) AS INTEGER) AS tme,
-        COUNT(*) AS dias
+        COUNT(DISTINCT date_real) AS dias
       FROM atplus_cons_daily
     `,
     )
@@ -174,9 +174,10 @@ function readDashboardData(db) {
         tx_abandono_na AS txAbandono,
         tma_seg AS tma,
         tme_seg AS tme,
+        hora,
         date_real AS dateReal
       FROM atplus_cons_daily
-      ORDER BY date_real, data_label
+      ORDER BY date_real, hora, data_label
     `,
     )
     .all();
@@ -192,9 +193,10 @@ function readDashboardData(db) {
         tentativas_perdidas AS perdidas,
         tma_seg AS tma,
         tme_seg AS tme,
+        hora,
         date_real AS dateReal
       FROM atplus_attendant_daily
-      ORDER BY date_real, ramal
+      ORDER BY date_real, hora, ramal
     `,
     )
     .all();
@@ -245,9 +247,10 @@ function readDashboardDataForAttendant(db, user, scope) {
           tx_abandono_na AS txAbandono,
           tma_seg AS tma,
           tme_seg AS tme,
+          hora,
           date_real AS dateReal
         FROM atplus_cons_daily
-        ORDER BY date_real, data_label
+        ORDER BY date_real, hora, data_label
       `,
       )
       .all();
@@ -291,11 +294,12 @@ function readDashboardDataForAttendant(db, user, scope) {
             END AS txAbandono,
             CAST(ROUND(AVG(tma_seg)) AS INTEGER) AS tma,
             CAST(ROUND(AVG(tme_seg)) AS INTEGER) AS tme,
+            hora,
             date_real AS dateReal
           FROM atplus_attendant_daily
           WHERE ramal = ?
-          GROUP BY data_label, date_real
-          ORDER BY date_real, data_label
+          GROUP BY data_label, date_real, hora
+          ORDER BY date_real, hora, data_label
         `,
         )
         .all(ramal)
@@ -313,10 +317,11 @@ function readDashboardDataForAttendant(db, user, scope) {
             tentativas_perdidas AS perdidas,
             tma_seg AS tma,
             tme_seg AS tme,
+            hora,
             date_real AS dateReal
           FROM atplus_attendant_daily
           WHERE ramal = ?
-          ORDER BY date_real, ramal
+          ORDER BY date_real, hora, ramal
         `,
         )
         .all(ramal)

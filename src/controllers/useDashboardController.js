@@ -13,6 +13,26 @@ function apiUrl(path) {
   return `${API_BASE}${path}`;
 }
 
+function parseApiDate(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const text = String(value).trim();
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const year = Number.parseInt(dateOnly[1], 10);
+    const month = Number.parseInt(dateOnly[2], 10);
+    const day = Number.parseInt(dateOnly[3], 10);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function useDashboardController({
   authToken,
   viewScope = "own",
@@ -114,15 +134,15 @@ export function useDashboardController({
 
         const nextCons = (data.cons || []).map((row) => ({
           ...row,
-          dateReal: row.dateReal ? new Date(row.dateReal) : null,
+          dateReal: parseApiDate(row.dateReal),
         }));
         const nextAtend = (data.atend || []).map((row) => ({
           ...row,
-          dateReal: row.dateReal ? new Date(row.dateReal) : null,
+          dateReal: parseApiDate(row.dateReal),
         }));
         const nextTickets = (data.tickets || []).map((row) => ({
           ...row,
-          dateReal: row.dataAbertura ? new Date(row.dataAbertura) : null,
+          dateReal: parseApiDate(row.dataAbertura),
         }));
 
         setCons(nextCons);

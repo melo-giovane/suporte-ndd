@@ -343,6 +343,55 @@ function TabBtn({ id, icon, label, activeTab, onSelect }) {
   );
 }
 
+function resolveHourFromConsEntry(entry) {
+  const fromField = Number.parseInt(String(entry?.hora ?? ""), 10);
+  if (Number.isInteger(fromField) && fromField >= 0 && fromField <= 23) {
+    return fromField;
+  }
+
+  const label = String(entry?.data || "").trim();
+  const match = label.match(/(?:\s|^)([01]?\d|2[0-3])(?::\d{2})?$/);
+  if (!match) return null;
+
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23
+    ? parsed
+    : null;
+}
+
+function resolveDayGroupFromConsEntry(entry) {
+  const rawDate = entry?.dateReal;
+  const parsedDate =
+    rawDate instanceof Date ? rawDate : rawDate ? new Date(rawDate) : null;
+
+  if (parsedDate && !Number.isNaN(parsedDate.getTime())) {
+    const yyyy = parsedDate.getFullYear();
+    const mm = `${parsedDate.getMonth() + 1}`.padStart(2, "0");
+    const dd = `${parsedDate.getDate()}`.padStart(2, "0");
+    return {
+      key: `${yyyy}-${mm}-${dd}`,
+      label: `${dd}/${mm}`,
+    };
+  }
+
+  const label = String(entry?.data || "").trim();
+  const csvMatch = label.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (csvMatch) {
+    const dd = csvMatch[1].padStart(2, "0");
+    const mm = csvMatch[2].padStart(2, "0");
+    const yyyy = csvMatch[3];
+    return {
+      key: `${yyyy}-${mm}-${dd}`,
+      label: `${dd}/${mm}`,
+    };
+  }
+
+  return {
+    key: label || "(sem-data)",
+    label: label || "-",
+  };
+}
+
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
@@ -382,6 +431,7 @@ export default function App() {
   const [userLinkOptions, setUserLinkOptions] = useState({
     attendants: [],
   });
+  const [expandedTelefoniaDays, setExpandedTelefoniaDays] = useState({});
 
   const isMaster = authUser?.role === "master";
   const isAttendant = authUser?.role === "atendente";
@@ -428,7 +478,6 @@ export default function App() {
     isRestoring,
     incrementalStatus,
     reprocessStatus,
-    teamTotals,
     incrementalFileRef,
     reprocessFileRef,
     fCons,
@@ -457,12 +506,16 @@ export default function App() {
     onUnauthorized: handleLogout,
   });
 
-  const effectiveKpis = useMemo(() => {
-    if (isAttendant && attendantScope === "team" && teamTotals) {
-      return teamTotals;
-    }
-    return kpis;
-  }, [attendantScope, isAttendant, kpis, teamTotals]);
+  const effectiveKpis = useMemo(() => kpis, [kpis]);
+
+  const totalDaysCount = useMemo(() => {
+    const uniqueDays = new Set();
+    cons.forEach((row) => {
+      const group = resolveDayGroupFromConsEntry(row);
+      if (group?.key) uniqueDays.add(group.key);
+    });
+    return uniqueDays.size;
+  }, [cons]);
 
   const fetchUsers = useCallback(async () => {
     if (!authToken || !isMaster) return;
@@ -655,6 +708,179 @@ export default function App() {
       (t) => (t.responsavel || "").trim().toLowerCase() === responsibleName,
     );
   }, [authUser?.attendantResponsavel, filteredTicketsList, isAttendant]);
+
+  const hourlyActivity = useMemo(() => {
+    const buckets = new Map();
+
+    fCons.forEach((row) => {
+      const hour = resolveHourFromConsEntry(row);
+      if (hour === null) return;
+
+      const current = buckets.get(hour) || {
+        hora: hour,
+        total: 0,
+        atendidas: 0,
+        naoAtendidas: 0,
+        abandonadas: 0,
+        registros: 0,
+      };
+
+      current.total += Number(row.total) || 0;
+      current.atendidas += Number(row.atendidas) || 0;
+      current.naoAtendidas += Number(row.naoAtendidas) || 0;
+      current.abandonadas += Number(row.abandonadas) || 0;
+      current.registros += 1;
+
+      buckets.set(hour, current);
+    });
+
+    return Array.from(buckets.values())
+      .sort((a, b) => a.hora - b.hora)
+      .map((row) => {
+        const indisponiveis = row.naoAtendidas + row.abandonadas;
+        return {
+          ...row,
+          horaLabel: `${String(row.hora).padStart(2, "0")}:00`,
+          indisponiveis,
+          txAtend: row.total ? row.atendidas / row.total : 0,
+          txAbandono: row.total ? indisponiveis / row.total : 0,
+        };
+      });
+  }, [fCons]);
+
+  const telefoniaDailyGroups = useMemo(() => {
+    const groups = new Map();
+
+    fCons.forEach((row) => {
+      const { key, label } = resolveDayGroupFromConsEntry(row);
+      const hour = resolveHourFromConsEntry(row);
+      const rowTotal = Number(row.total) || 0;
+      const rowAtendidas = Number(row.atendidas) || 0;
+      const rowNaoAtendidas = Number(row.naoAtendidas) || 0;
+      const rowAbandonadas = Number(row.abandonadas) || 0;
+      const rowTma = Number(row.tma) || 0;
+      const rowTme = Number(row.tme) || 0;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label,
+          total: 0,
+          atendidas: 0,
+          naoAtendidas: 0,
+          abandonadas: 0,
+          tmaSum: 0,
+          tmeSum: 0,
+          rowsCount: 0,
+          rows: [],
+        });
+      }
+
+      const group = groups.get(key);
+      group.total += rowTotal;
+      group.atendidas += rowAtendidas;
+      group.naoAtendidas += rowNaoAtendidas;
+      group.abandonadas += rowAbandonadas;
+      group.tmaSum += rowTma;
+      group.tmeSum += rowTme;
+      group.rowsCount += 1;
+      group.rows.push({
+        hour,
+        hourLabel:
+          hour === null
+            ? String(row.data || "-")
+            : `${String(hour).padStart(2, "0")}:00`,
+        total: rowTotal,
+        atendidas: rowAtendidas,
+        naoAtendidas: rowNaoAtendidas,
+        abandonadas: rowAbandonadas,
+        txAbandono: Number(row.txAbandono) || 0,
+        tma: rowTma,
+        tme: rowTme,
+      });
+    });
+
+    return Array.from(groups.values())
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((group) => {
+        const hasHourlyRows = group.rows.some((row) => row.hour !== null);
+        const baseRows = hasHourlyRows
+          ? group.rows.filter((row) => row.hour !== null)
+          : group.rows;
+
+        const rows = [...baseRows].sort((a, b) => {
+          const ah = a.hour === null ? 99 : a.hour;
+          const bh = b.hour === null ? 99 : b.hour;
+          if (ah !== bh) return ah - bh;
+          return String(a.hourLabel).localeCompare(
+            String(b.hourLabel),
+            "pt-BR",
+          );
+        });
+
+        const totals = baseRows.reduce(
+          (acc, row) => {
+            acc.total += row.total;
+            acc.atendidas += row.atendidas;
+            acc.naoAtendidas += row.naoAtendidas;
+            acc.abandonadas += row.abandonadas;
+            acc.tmaSum += row.tma;
+            acc.tmeSum += row.tme;
+            acc.rowsCount += 1;
+            return acc;
+          },
+          {
+            total: 0,
+            atendidas: 0,
+            naoAtendidas: 0,
+            abandonadas: 0,
+            tmaSum: 0,
+            tmeSum: 0,
+            rowsCount: 0,
+          },
+        );
+
+        const txAbandono = totals.total
+          ? (totals.naoAtendidas + totals.abandonadas) / totals.total
+          : 0;
+        const txAtend = totals.total ? totals.atendidas / totals.total : 0;
+
+        return {
+          key: group.key,
+          label: group.label,
+          total: totals.total,
+          atendidas: totals.atendidas,
+          naoAtendidas: totals.naoAtendidas,
+          abandonadas: totals.abandonadas,
+          txAbandono,
+          tma: totals.rowsCount
+            ? Math.round(totals.tmaSum / totals.rowsCount)
+            : 0,
+          tme: totals.rowsCount
+            ? Math.round(totals.tmeSum / totals.rowsCount)
+            : 0,
+          txAtend,
+          hasHourlyDetails: hasHourlyRows,
+          rows,
+        };
+      });
+  }, [fCons]);
+
+  const telefoniaDailyAbandonmentChart = useMemo(
+    () =>
+      telefoniaDailyGroups.map((day) => ({
+        dia: day.label,
+        "Tx Ab./NA": day.txAbandono,
+      })),
+    [telefoniaDailyGroups],
+  );
+
+  const toggleTelefoniaDay = useCallback((dayKey) => {
+    setExpandedTelefoniaDays((prev) => ({
+      ...prev,
+      [dayKey]: !prev[dayKey],
+    }));
+  }, []);
 
   const ticketFilterLabel = useMemo(() => {
     const labels = {
@@ -925,7 +1151,8 @@ export default function App() {
               Central de Relacionamentos NDD
             </h1>
             <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
-              {effectiveKpis.dias} dias filtrados · {cons.length} total ·{" "}
+              {effectiveKpis.dias} dias filtrados · {totalDaysCount} dias total
+              ·{" "}
               {isAttendant && attendantScope === "team"
                 ? effectiveKpis.tkt
                 : tickets.length}{" "}
@@ -1170,6 +1397,13 @@ export default function App() {
             onSelect={setTab}
           />
           <TabBtn
+            id="atividade-hora"
+            icon="🕒"
+            label="Atividade/Hora"
+            activeTab={tab}
+            onSelect={setTab}
+          />
+          <TabBtn
             id="tickets"
             icon="🎫"
             label="Tickets"
@@ -1226,6 +1460,7 @@ export default function App() {
               metricSel={metricSel}
               setMetricSel={setMetricSel}
               dailyChart={dailyChart}
+              fCons={fCons}
               fAtend={fAtend}
               fTickets={fTickets}
               catData={catData}
@@ -1289,14 +1524,17 @@ export default function App() {
                 marginTop: 14,
               }}
             >
-              <ChartCard title="Taxa de Atendimento Diária" h={200}>
+              <ChartCard title="Taxa de Abandono/Não Atendidas Diária" h={200}>
                 <ResponsiveContainer>
-                  <LineChart data={dailyChart}>
+                  <LineChart data={telefoniaDailyAbandonmentChart}>
                     <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                     <XAxis
                       dataKey="dia"
                       tick={{ fill: P.dim, fontSize: 9 }}
-                      interval={Math.max(0, Math.floor(dailyChart.length / 12))}
+                      interval={Math.max(
+                        0,
+                        Math.floor(telefoniaDailyAbandonmentChart.length / 12),
+                      )}
                     />
                     <YAxis
                       tick={{ fill: P.dim, fontSize: 10 }}
@@ -1306,8 +1544,8 @@ export default function App() {
                     <Tooltip content={<TT />} />
                     <Line
                       type="monotone"
-                      dataKey="Tx Atend"
-                      stroke={P.green}
+                      dataKey="Tx Ab./NA"
+                      stroke={P.orange}
                       strokeWidth={2}
                       dot={{ r: 2 }}
                     />
@@ -1316,33 +1554,421 @@ export default function App() {
               </ChartCard>
             </div>
             <Section title="Detalhamento Diário" icon="📅">
-              <Table
-                headers={[
-                  "Dia",
-                  "Total",
-                  "Atend.",
-                  "Não At.",
-                  "Aband.",
-                  "Tx Ab./NA",
-                  "TMA(s)",
-                  "TME(s)",
-                  "Tx Atend.",
-                  "NS",
-                ]}
-                rows={fCons.map((c) => [
-                  c.data,
-                  c.total,
-                  c.atendidas,
-                  c.naoAtendidas,
-                  c.abandonadas,
-                  fmtPct(c.txAbandono),
-                  fmtSec(c.tma),
-                  fmtSec(c.tme),
-                  c.total ? fmtPct(c.atendidas / c.total) : "-",
-                  c.total && c.atendidas / c.total >= 0.9 ? "✅" : "⚠️",
-                ])}
-              />
+              <div
+                style={{
+                  overflowX: "auto",
+                  borderRadius: 12,
+                  border: `1px solid ${P.bdr}`,
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: 12,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {[
+                        "Dia",
+                        "Total",
+                        "Atend.",
+                        "Não At.",
+                        "Aband.",
+                        "Tx Ab./NA",
+                        "TMA(s)",
+                        "TME(s)",
+                        "Tx Atend.",
+                        "NS",
+                      ].map((h, i) => (
+                        <th
+                          key={h}
+                          style={{
+                            padding: "10px 10px",
+                            textAlign: i === 0 ? "left" : "right",
+                            color: P.dim,
+                            fontWeight: 600,
+                            fontSize: 10,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.8,
+                            background: P.card,
+                            borderBottom: `1px solid ${P.bdr}`,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {telefoniaDailyGroups.flatMap((day, idx) => {
+                      const expanded = !!expandedTelefoniaDays[day.key];
+
+                      const parentRow = (
+                        <tr
+                          key={`day-${day.key}`}
+                          onClick={
+                            day.hasHourlyDetails
+                              ? () => toggleTelefoniaDay(day.key)
+                              : undefined
+                          }
+                          style={{
+                            background: idx % 2 === 0 ? "transparent" : P.card,
+                            cursor: day.hasHourlyDetails
+                              ? "pointer"
+                              : "default",
+                          }}
+                        >
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "left",
+                              color: P.text,
+                              fontWeight: 600,
+                              whiteSpace: "nowrap",
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.hasHourlyDetails
+                              ? expanded
+                                ? "▾ "
+                                : "▸ "
+                              : "• "}
+                            {day.label}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.total}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.atendidas}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.naoAtendidas}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.abandonadas}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {fmtPct(day.txAbandono)}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {fmtSec(day.tma)}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {fmtSec(day.tme)}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.total ? fmtPct(day.txAtend) : "-"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 10px",
+                              textAlign: "right",
+                              color: P.text,
+                              borderBottom: `1px solid ${P.bdr}15`,
+                            }}
+                          >
+                            {day.total && day.txAtend >= 0.9 ? "✅" : "⚠️"}
+                          </td>
+                        </tr>
+                      );
+
+                      if (!day.hasHourlyDetails || !expanded) {
+                        return [parentRow];
+                      }
+
+                      const children = day.rows.map((row, childIdx) => {
+                        const txAtend = row.total
+                          ? row.atendidas / row.total
+                          : 0;
+                        return (
+                          <tr
+                            key={`hour-${day.key}-${childIdx}`}
+                            style={{ background: `${P.cardH}88` }}
+                          >
+                            <td
+                              style={{
+                                padding: "8px 10px 8px 26px",
+                                textAlign: "left",
+                                color: P.dim,
+                                fontWeight: 500,
+                                whiteSpace: "nowrap",
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.hourLabel}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.total}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.atendidas}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.naoAtendidas}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.abandonadas}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {fmtPct(row.txAbandono)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {fmtSec(row.tma)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {fmtSec(row.tme)}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.total ? fmtPct(txAtend) : "-"}
+                            </td>
+                            <td
+                              style={{
+                                padding: "8px 10px",
+                                textAlign: "right",
+                                color: P.dim,
+                                borderBottom: `1px solid ${P.bdr}15`,
+                              }}
+                            >
+                              {row.total && txAtend >= 0.9 ? "✅" : "⚠️"}
+                            </td>
+                          </tr>
+                        );
+                      });
+
+                      return [parentRow, ...children];
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </Section>
+          </>
+        )}
+
+        {tab === "atividade-hora" && (
+          <>
+            {hourlyActivity.length === 0 ? (
+              <Section title="Atividade por Hora" icon="🕒">
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    border: `1px solid ${P.bdr}`,
+                    background: P.card,
+                    color: P.dim,
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Nenhum registro por hora foi encontrado no período filtrado.
+                  Reprocesse a base completa com o novo modelo para habilitar
+                  esta análise.
+                </div>
+              </Section>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                  <ChartCard title="Volume de Ligações por Hora" h={260}>
+                    <ResponsiveContainer>
+                      <BarChart data={hourlyActivity} barGap={3}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
+                        <XAxis
+                          dataKey="horaLabel"
+                          tick={{ fill: P.dim, fontSize: 10 }}
+                        />
+                        <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
+                        <Tooltip content={<TT />} />
+                        <Bar
+                          dataKey="total"
+                          name="Total"
+                          fill={P.accent}
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="atendidas"
+                          name="Atendidas"
+                          fill={P.green}
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 10 }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartCard>
+
+                  <ChartCard title="Taxas por Hora" h={260}>
+                    <ResponsiveContainer>
+                      <LineChart data={hourlyActivity}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
+                        <XAxis
+                          dataKey="horaLabel"
+                          tick={{ fill: P.dim, fontSize: 10 }}
+                        />
+                        <YAxis
+                          tick={{ fill: P.dim, fontSize: 10 }}
+                          domain={[0, 1]}
+                          tickFormatter={(v) => fmtPct(v)}
+                        />
+                        <Tooltip content={<TT />} />
+                        <Line
+                          type="monotone"
+                          dataKey="txAtend"
+                          name="Tx Atend."
+                          stroke={P.green}
+                          strokeWidth={2}
+                          dot={{ r: 2 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="txAbandono"
+                          name="Tx Ab./NA"
+                          stroke={P.red}
+                          strokeWidth={2}
+                          dot={{ r: 2 }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 10 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartCard>
+                </div>
+
+                <Section title="Detalhamento por Hora" icon="📋">
+                  <Table
+                    headers={[
+                      "Hora",
+                      "Total",
+                      "Atend.",
+                      "Não At.",
+                      "Aband.",
+                      "Tx Atend.",
+                      "Tx Ab./NA",
+                    ]}
+                    rows={hourlyActivity.map((h) => [
+                      h.horaLabel,
+                      h.total,
+                      h.atendidas,
+                      h.naoAtendidas,
+                      h.abandonadas,
+                      fmtPct(h.txAtend),
+                      fmtPct(h.txAbandono),
+                    ])}
+                  />
+                </Section>
+              </>
+            )}
           </>
         )}
 

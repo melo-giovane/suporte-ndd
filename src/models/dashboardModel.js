@@ -131,27 +131,93 @@ export function parseWorkbookData(XLSX, workbook) {
   return { cons: nextCons, atend: nextAtend, tickets: nextTickets };
 }
 
+function parseDateFilterInput(value) {
+  if (!value) return null;
+
+  const text = String(value).trim();
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const year = Number.parseInt(dateOnly[1], 10);
+    const month = Number.parseInt(dateOnly[2], 10);
+    const day = Number.parseInt(dateOnly[3], 10);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function filterByDateRange(items, dateFrom, dateTo) {
-  const df = dateFrom ? new Date(dateFrom) : null;
-  const dt = dateTo ? new Date(dateTo) : null;
+  const df = parseDateFilterInput(dateFrom);
+  const dt = parseDateFilterInput(dateTo);
 
   return items.filter((item) => {
-    const d = item.dateReal;
-    if (!d) return true;
+    const d =
+      item?.dateReal instanceof Date
+        ? item.dateReal
+        : item?.dateReal
+          ? new Date(item.dateReal)
+          : null;
+
+    if (!d || Number.isNaN(d.getTime())) return true;
+
     if (df && d < df) return false;
     if (dt) {
       const end = new Date(dt);
-      end.setHours(23, 59, 59);
+      end.setHours(23, 59, 59, 999);
       if (d > end) return false;
     }
     return true;
   });
 }
 
+function buildDayKey(item) {
+  const fromDateReal =
+    item?.dateReal instanceof Date
+      ? item.dateReal
+      : item?.dateReal
+        ? new Date(item.dateReal)
+        : null;
+
+  if (fromDateReal && !Number.isNaN(fromDateReal.getTime())) {
+    const yyyy = fromDateReal.getFullYear();
+    const mm = `${fromDateReal.getMonth() + 1}`.padStart(2, "0");
+    const dd = `${fromDateReal.getDate()}`.padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const raw = String(item?.data || "").trim();
+  if (!raw) return null;
+
+  const csvMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (csvMatch) {
+    const dd = csvMatch[1].padStart(2, "0");
+    const mm = csvMatch[2].padStart(2, "0");
+    const yyyy = csvMatch[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const parsedPt = parseDataPt(raw);
+  if (parsedPt && !Number.isNaN(parsedPt.getTime())) {
+    const yyyy = parsedPt.getFullYear();
+    const mm = `${parsedPt.getMonth() + 1}`.padStart(2, "0");
+    const dd = `${parsedPt.getDate()}`.padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return raw;
+}
+
 export function buildKpis(fCons, fTickets) {
   const tc = fCons.reduce((a, c) => a + c.total, 0);
   const ta = fCons.reduce((a, c) => a + c.atendidas, 0);
   const tab = fCons.reduce((a, c) => a + c.abandonadas + c.naoAtendidas, 0);
+  const uniqueDays = new Set();
+  fCons.forEach((item) => {
+    const key = buildDayKey(item);
+    if (key) uniqueDays.add(key);
+  });
+  const dias = uniqueDays.size;
   const tma = fCons.length
     ? Math.round(fCons.reduce((a, c) => a + c.tma, 0) / fCons.length)
     : 0;
@@ -172,7 +238,7 @@ export function buildKpis(fCons, fTickets) {
     tktA: fTickets.filter((t) => t.status === "Aberto").length,
     tktTransf: fTickets.filter(isTransferencia).length,
     tktErros: fTickets.filter(isErroApp).length,
-    dias: fCons.length,
+    dias,
   };
 }
 

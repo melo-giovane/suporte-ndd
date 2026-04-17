@@ -69,6 +69,7 @@ export function ensureSchema(db) {
       data_key TEXT NOT NULL,
       data_label TEXT NOT NULL,
       date_real TEXT,
+      hora INTEGER,
       fila TEXT,
       total_chamadas INTEGER NOT NULL DEFAULT 0,
       chamadas_atendidas INTEGER NOT NULL DEFAULT 0,
@@ -91,6 +92,7 @@ export function ensureSchema(db) {
       data_key TEXT NOT NULL,
       data_label TEXT NOT NULL,
       date_real TEXT,
+      hora INTEGER,
       fila TEXT,
       ramal TEXT NOT NULL,
       total_tentativas INTEGER NOT NULL DEFAULT 0,
@@ -172,6 +174,24 @@ export function ensureSchema(db) {
     .prepare("PRAGMA table_info(ellevo_tickets)")
     .all()
     .map((c) => c.name);
+
+  const consCols = db
+    .prepare("PRAGMA table_info(atplus_cons_daily)")
+    .all()
+    .map((c) => c.name);
+
+  if (!consCols.includes("hora")) {
+    db.exec("ALTER TABLE atplus_cons_daily ADD COLUMN hora INTEGER");
+  }
+
+  const atendCols = db
+    .prepare("PRAGMA table_info(atplus_attendant_daily)")
+    .all()
+    .map((c) => c.name);
+
+  if (!atendCols.includes("hora")) {
+    db.exec("ALTER TABLE atplus_attendant_daily ADD COLUMN hora INTEGER");
+  }
 
   if (!ticketCols.includes("tramites")) {
     db.exec("ALTER TABLE ellevo_tickets ADD COLUMN tramites TEXT");
