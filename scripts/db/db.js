@@ -1,11 +1,41 @@
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import Database from "better-sqlite3";
+import { hashPassword } from "./auth.js";
 
 export const DEFAULT_DB_PATH = path.resolve(
   process.cwd(),
   "data/sqlite/central_relacionamentos.db",
 );
+
+const DEFAULT_ATTENDANTS = [
+  {
+    name: "Gessica Freitas Becker",
+    atplus_alias: "Gessica Freitas Becker",
+    tickets_alias: "GESSICA FREITAS BECKER",
+  },
+  {
+    name: "Matheus Lucas de Carvalho",
+    atplus_alias: "Matheus - Central",
+    tickets_alias: "Matheus Lucas de Carvalho",
+  },
+  {
+    name: "Isaque de Oliveira dos Santos",
+    atplus_alias: "Isaque - Central",
+    tickets_alias: "Isaque de Oliveira dos Santos",
+  },
+  {
+    name: "Marcos Costa",
+    atplus_alias: "Marcos - Central",
+    tickets_alias: "Marcos Costa",
+  },
+  {
+    name: "Diego Dias Fernandes",
+    atplus_alias: "Diego - Central",
+    tickets_alias: "Diego Dias Fernandes",
+  },
+];
 
 export function openDatabase(dbPath = DEFAULT_DB_PATH) {
   const resolved = path.resolve(dbPath);
@@ -103,6 +133,33 @@ export function ensureSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_ellevo_responsavel
       ON ellevo_tickets (responsavel);
+
+    CREATE TABLE IF NOT EXISTS attendants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      atplus_alias TEXT UNIQUE COLLATE NOCASE,
+      tickets_alias TEXT UNIQUE COLLATE NOCASE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_attendants_name
+      ON attendants (name);
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('master', 'atendente')),
+      attendant_id INTEGER,
+      attendant_ramal TEXT,
+      attendant_responsavel TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (attendant_id) REFERENCES attendants (id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_role
+      ON users (role);
   `);
 
   // Lightweight migration for legacy databases where ticket detail columns
@@ -130,5 +187,87 @@ export function ensureSchema(db) {
         AND "trâmites" IS NOT NULL
         AND "trâmites" <> ''
     `);
+  }
+
+  const userCols = db
+    .prepare("PRAGMA table_info(users)")
+    .all()
+    .map((c) => c.name);
+
+  if (!userCols.includes("attendant_ramal")) {
+    db.exec("ALTER TABLE users ADD COLUMN attendant_ramal TEXT");
+  }
+  if (!userCols.includes("attendant_responsavel")) {
+    db.exec("ALTER TABLE users ADD COLUMN attendant_responsavel TEXT");
+  }
+  if (!userCols.includes("attendant_id")) {
+    db.exec("ALTER TABLE users ADD COLUMN attendant_id INTEGER");
+  }
+  if (!userCols.includes("is_active")) {
+    db.exec(
+      "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
+    );
+  }
+
+  const upsertAttendant = db.prepare(`
+    INSERT INTO attendants (name, atplus_alias, tickets_alias)
+    VALUES (@name, @atplus_alias, @tickets_alias)
+    ON CONFLICT(name) DO UPDATE SET
+      atplus_alias = excluded.atplus_alias,
+      tickets_alias = excluded.tickets_alias
+  `);
+
+  DEFAULT_ATTENDANTS.forEach((attendant) => {
+    upsertAttendant.run(attendant);
+  });
+
+  db.exec(`
+    UPDATE users
+    SET attendant_id = (
+      SELECT a.id
+      FROM attendants a
+      WHERE (
+        users.attendant_ramal IS NOT NULL
+        AND TRIM(users.attendant_ramal) <> ''
+        AND a.atplus_alias = users.attendant_ramal COLLATE NOCASE
+      )
+      OR (
+        users.attendant_responsavel IS NOT NULL
+        AND TRIM(users.attendant_responsavel) <> ''
+        AND a.tickets_alias = users.attendant_responsavel COLLATE NOCASE
+      )
+      LIMIT 1
+    )
+    WHERE users.role = 'atendente'
+      AND users.attendant_id IS NULL
+  `);
+
+  const masterCount = db
+    .prepare("SELECT COUNT(*) AS total FROM users WHERE role = 'master'")
+    .get()?.total;
+
+  if (!masterCount) {
+    const defaultMasterUser = process.env.DEFAULT_MASTER_USER || "master";
+    const defaultMasterPassword =
+      process.env.DEFAULT_MASTER_PASSWORD || "master123";
+
+    db.prepare(
+      `
+      INSERT INTO users (
+        username,
+        password_hash,
+        role,
+        attendant_id,
+        attendant_ramal,
+        attendant_responsavel,
+        is_active
+      )
+      VALUES (?, ?, 'master', NULL, NULL, NULL, 1)
+    `,
+    ).run(defaultMasterUser, hashPassword(defaultMasterPassword));
+
+    console.log(
+      `[db] Usuário master inicial criado: ${defaultMasterUser} (altere a senha após o primeiro acesso).`,
+    );
   }
 }

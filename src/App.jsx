@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { fmtSec, fmtPct, isErroApp, isTransferencia } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
@@ -100,6 +108,12 @@ const INITIAL_THEME_MODE =
 let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
 let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
 const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
+
+const API_BASE = import.meta.env.DEV ? "http://localhost:8787" : "";
+
+function apiUrl(path) {
+  return `${API_BASE}${path}`;
+}
 
 function KPI({ label, value, sub, color, icon }) {
   return (
@@ -335,6 +349,66 @@ export default function App() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [pendingTicketListScroll, setPendingTicketListScroll] = useState(false);
   const ticketListSectionRef = useRef(null);
+  const [authToken, setAuthToken] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("auth-token") || "";
+  });
+  const [authUser, setAuthUser] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem("auth-user");
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loginStatus, setLoginStatus] = useState({
+    state: "idle",
+    message: "",
+  });
+  const [attendantScope, setAttendantScope] = useState("own");
+  const [usersList, setUsersList] = useState([]);
+  const [userMgmtStatus, setUserMgmtStatus] = useState({
+    state: "idle",
+    message: "",
+  });
+  const [userForm, setUserForm] = useState({
+    username: "",
+    password: "",
+    role: "atendente",
+    attendantId: "",
+  });
+  const [userLinkOptions, setUserLinkOptions] = useState({
+    attendants: [],
+  });
+
+  const isMaster = authUser?.role === "master";
+  const isAttendant = authUser?.role === "atendente";
+
+  const handleLogout = useCallback(async () => {
+    if (authToken) {
+      try {
+        await fetch(apiUrl("/api/auth/logout"), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+      } catch {
+        // Logout local é suficiente se API não responder.
+      }
+    }
+
+    setAuthToken("");
+    setAuthUser(null);
+    setUsersList([]);
+    setAttendantScope("own");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("auth-token");
+      window.localStorage.removeItem("auth-user");
+    }
+  }, [authToken]);
 
   useEffect(() => {
     window.localStorage.setItem("theme-mode", themeMode);
@@ -353,6 +427,7 @@ export default function App() {
     isRestoring,
     incrementalStatus,
     reprocessStatus,
+    teamTotals,
     fileRef,
     incrementalFileRef,
     reprocessFileRef,
@@ -377,7 +452,179 @@ export default function App() {
     handleReprocessFile,
     handleDrop,
     retryLoadFromDatabase,
-  } = useDashboardController();
+  } = useDashboardController({
+    authToken,
+    viewScope: isAttendant ? attendantScope : "team",
+    onUnauthorized: handleLogout,
+  });
+
+  const effectiveKpis = useMemo(() => {
+    if (isAttendant && attendantScope === "team" && teamTotals) {
+      return teamTotals;
+    }
+    return kpis;
+  }, [attendantScope, isAttendant, kpis, teamTotals]);
+
+  const fetchUsers = useCallback(async () => {
+    if (!authToken || !isMaster) return;
+
+    try {
+      const resp = await fetch(apiUrl("/api/users"), {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (!resp.ok) {
+        throw new Error("Não foi possível carregar usuários.");
+      }
+
+      const body = await resp.json();
+      setUsersList(body?.users || []);
+    } catch {
+      setUserMgmtStatus({
+        state: "error",
+        message: "Falha ao carregar a lista de usuários.",
+      });
+    }
+  }, [authToken, isMaster]);
+
+  const fetchUserLinkOptions = useCallback(async () => {
+    if (!authToken || !isMaster) return;
+
+    try {
+      const resp = await fetch(apiUrl("/api/users/link-options"), {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (!resp.ok) {
+        throw new Error("Não foi possível carregar opções de vínculo.");
+      }
+
+      const body = await resp.json();
+      setUserLinkOptions({
+        attendants: body?.options?.attendants || [],
+      });
+    } catch {
+      setUserMgmtStatus((prev) => ({
+        ...prev,
+        state: prev.state === "idle" ? "error" : prev.state,
+        message:
+          prev.message ||
+          "Falha ao carregar opções de atendente para cadastro.",
+      }));
+    }
+  }, [authToken, isMaster]);
+
+  const handleLogin = useCallback(
+    async (e) => {
+      e.preventDefault();
+
+      setLoginStatus({ state: "saving", message: "Validando acesso..." });
+
+      try {
+        const resp = await fetch(apiUrl("/api/auth/login"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(loginForm),
+        });
+
+        const body = await resp.json();
+        if (!resp.ok || !body?.token || !body?.user) {
+          throw new Error(body?.error || "Credenciais inválidas.");
+        }
+
+        setAuthToken(body.token);
+        setAuthUser(body.user);
+        setAttendantScope("own");
+        setLoginStatus({ state: "success", message: "Login realizado." });
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("auth-token", body.token);
+          window.localStorage.setItem("auth-user", JSON.stringify(body.user));
+        }
+      } catch (error) {
+        setLoginStatus({
+          state: "error",
+          message:
+            error instanceof Error ? error.message : "Falha ao autenticar.",
+        });
+      }
+    },
+    [loginForm],
+  );
+
+  const handleCreateUser = useCallback(
+    async (e) => {
+      e.preventDefault();
+      setUserMgmtStatus({
+        state: "saving",
+        message: "Criando usuário...",
+      });
+
+      try {
+        const payload = {
+          ...userForm,
+          username: userForm.username.trim(),
+        };
+
+        const resp = await fetch(apiUrl("/api/users"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const body = await resp.json();
+        if (!resp.ok) {
+          throw new Error(body?.error || "Falha ao criar usuário.");
+        }
+
+        setUserForm({
+          username: "",
+          password: "",
+          role: "atendente",
+          attendantId: "",
+        });
+        setUserMgmtStatus({
+          state: "success",
+          message: `Usuário ${body?.user?.username || ""} criado com sucesso.`,
+        });
+        await fetchUsers();
+      } catch (error) {
+        setUserMgmtStatus({
+          state: "error",
+          message:
+            error instanceof Error ? error.message : "Falha ao criar usuário.",
+        });
+      }
+    },
+    [authToken, fetchUsers, userForm],
+  );
+
+  useEffect(() => {
+    if (isMaster) {
+      fetchUsers();
+      fetchUserLinkOptions();
+    } else {
+      setUsersList([]);
+      setUserLinkOptions({ attendants: [] });
+    }
+  }, [fetchUserLinkOptions, fetchUsers, isMaster]);
+
+  useEffect(() => {
+    if (isMaster && (tab === "equipe" || tab === "atualizacao")) {
+      return;
+    }
+    if (!isMaster && (tab === "equipe" || tab === "atualizacao")) {
+      setTab("resumo");
+    }
+  }, [isMaster, setTab, tab]);
 
   const filteredTicketsList = useMemo(() => {
     if (ticketListFilterSel === "todos") return fTickets;
@@ -430,6 +677,142 @@ export default function App() {
       setPendingTicketListScroll(false);
     });
   }, [tab, pendingTicketListScroll]);
+
+  if (!authToken || !authUser) {
+    return (
+      <div
+        style={{
+          background: P.bg,
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+          fontFamily: "'DM Sans',-apple-system,sans-serif",
+        }}
+      >
+        <form
+          onSubmit={handleLogin}
+          style={{
+            width: "min(420px, 100%)",
+            background: P.card,
+            border: `1px solid ${P.bdr}`,
+            borderRadius: 14,
+            padding: 22,
+          }}
+        >
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              color: P.text,
+              fontWeight: 800,
+            }}
+          >
+            Login · Central de Relacionamentos
+          </h1>
+          <p style={{ margin: "8px 0 18px", fontSize: 12, color: P.dim }}>
+            Acesso por perfil: master ou atendente.
+          </p>
+
+          <label
+            style={{
+              display: "block",
+              fontSize: 11,
+              color: P.dim,
+              marginBottom: 6,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+            }}
+          >
+            Usuário
+          </label>
+          <input
+            value={loginForm.username}
+            onChange={(e) =>
+              setLoginForm((v) => ({ ...v, username: e.target.value }))
+            }
+            style={{
+              width: "100%",
+              background: P.cardH,
+              border: `1px solid ${P.bdr}`,
+              borderRadius: 8,
+              color: P.text,
+              fontSize: 13,
+              padding: "9px 10px",
+              marginBottom: 12,
+            }}
+            required
+          />
+
+          <label
+            style={{
+              display: "block",
+              fontSize: 11,
+              color: P.dim,
+              marginBottom: 6,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+            }}
+          >
+            Senha
+          </label>
+          <input
+            type="password"
+            value={loginForm.password}
+            onChange={(e) =>
+              setLoginForm((v) => ({ ...v, password: e.target.value }))
+            }
+            style={{
+              width: "100%",
+              background: P.cardH,
+              border: `1px solid ${P.bdr}`,
+              borderRadius: 8,
+              color: P.text,
+              fontSize: 13,
+              padding: "9px 10px",
+            }}
+            required
+          />
+
+          <button
+            type="submit"
+            style={{
+              width: "100%",
+              marginTop: 14,
+              background: P.accent,
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 12px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Entrar
+          </button>
+
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color:
+                loginStatus.state === "error"
+                  ? P.red
+                  : loginStatus.state === "success"
+                    ? P.green
+                    : P.dim,
+            }}
+          >
+            {loginStatus.message || ""}
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   if (!loaded) {
     return (
@@ -588,8 +971,11 @@ export default function App() {
               Central de Relacionamentos NDD
             </h1>
             <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
-              {kpis.dias} dias filtrados · {cons.length} total ·{" "}
-              {tickets.length} tickets
+              {effectiveKpis.dias} dias filtrados · {cons.length} total ·{" "}
+              {isAttendant && attendantScope === "team"
+                ? effectiveKpis.tkt
+                : tickets.length}{" "}
+              tickets
             </p>
           </div>
           <div
@@ -601,8 +987,20 @@ export default function App() {
               borderRadius: 10,
               padding: "6px 12px",
               border: `1px solid ${P.bdr}`,
+              flexWrap: "wrap",
             }}
           >
+            <span
+              style={{
+                fontSize: 11,
+                color: P.dim,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+              }}
+            >
+              {authUser?.username} · {isMaster ? "Master" : "Atendente"}
+            </span>
             <div
               style={{
                 display: "flex",
@@ -647,6 +1045,46 @@ export default function App() {
                 Light
               </button>
             </div>
+            {isAttendant && (
+              <div
+                style={{
+                  display: "flex",
+                  background: P.cardH,
+                  borderRadius: 7,
+                  border: `1px solid ${P.bdr}`,
+                  overflow: "hidden",
+                }}
+              >
+                <button
+                  onClick={() => setAttendantScope("own")}
+                  style={{
+                    border: "none",
+                    background:
+                      attendantScope === "own" ? P.accent : "transparent",
+                    color: attendantScope === "own" ? "#fff" : P.dim,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  Meus
+                </button>
+                <button
+                  onClick={() => setAttendantScope("team")}
+                  style={{
+                    border: "none",
+                    background:
+                      attendantScope === "team" ? P.accent : "transparent",
+                    color: attendantScope === "team" ? "#fff" : P.dim,
+                    padding: "4px 8px",
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  Totais da Equipe
+                </button>
+              </div>
+            )}
             <span style={{ fontSize: 11, color: P.dim, fontWeight: 600 }}>
               📅 De
             </span>
@@ -698,6 +1136,20 @@ export default function App() {
                 Limpar
               </button>
             )}
+            <button
+              onClick={handleLogout}
+              style={{
+                background: P.cardH,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 6,
+                padding: "4px 8px",
+                color: P.text,
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Sair
+            </button>
           </div>
         </div>
 
@@ -734,20 +1186,24 @@ export default function App() {
             activeTab={tab}
             onSelect={setTab}
           />
-          <TabBtn
-            id="equipe"
-            icon="👥"
-            label="Equipe"
-            activeTab={tab}
-            onSelect={setTab}
-          />
-          <TabBtn
-            id="atualizacao"
-            icon="➕"
-            label="Atualização"
-            activeTab={tab}
-            onSelect={setTab}
-          />
+          {isMaster && (
+            <TabBtn
+              id="equipe"
+              icon="👥"
+              label="Equipe"
+              activeTab={tab}
+              onSelect={setTab}
+            />
+          )}
+          {isMaster && (
+            <TabBtn
+              id="atualizacao"
+              icon="➕"
+              label="Atualização"
+              activeTab={tab}
+              onSelect={setTab}
+            />
+          )}
         </div>
 
         {tab === "resumo" && (
@@ -776,7 +1232,7 @@ export default function App() {
               TT={TT}
               fmtSec={fmtSec}
               fmtPct={fmtPct}
-              kpis={kpis}
+              kpis={effectiveKpis}
               metricSel={metricSel}
               setMetricSel={setMetricSel}
               dailyChart={dailyChart}
@@ -1506,6 +1962,202 @@ export default function App() {
                       }
                     }}
                   />
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Gestão de Usuários" icon="🔐">
+              <div
+                style={{
+                  display: "flex",
+                  gap: 14,
+                  flexWrap: "wrap",
+                }}
+              >
+                <form
+                  onSubmit={handleCreateUser}
+                  style={{
+                    background: P.card,
+                    borderRadius: 14,
+                    border: `1px solid ${P.bdr}`,
+                    padding: 14,
+                    flex: "1 1 360px",
+                    minWidth: 320,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: P.dim,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Novo usuário
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <input
+                      placeholder="Usuário"
+                      value={userForm.username}
+                      onChange={(e) =>
+                        setUserForm((v) => ({ ...v, username: e.target.value }))
+                      }
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                      required
+                    />
+                    <input
+                      type="password"
+                      placeholder="Senha"
+                      value={userForm.password}
+                      onChange={(e) =>
+                        setUserForm((v) => ({ ...v, password: e.target.value }))
+                      }
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                      required
+                    />
+                    <select
+                      value={userForm.role}
+                      onChange={(e) =>
+                        setUserForm((v) => ({ ...v, role: e.target.value }))
+                      }
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                    >
+                      <option value="atendente">Atendente</option>
+                      <option value="master">Master</option>
+                    </select>
+
+                    {userForm.role === "atendente" && (
+                      <select
+                        value={userForm.attendantId}
+                        onChange={(e) =>
+                          setUserForm((v) => ({
+                            ...v,
+                            attendantId: e.target.value,
+                          }))
+                        }
+                        style={{
+                          background: P.cardH,
+                          border: `1px solid ${P.bdr}`,
+                          borderRadius: 8,
+                          color: P.text,
+                          padding: "8px 10px",
+                          fontSize: 12,
+                        }}
+                        required
+                      >
+                        <option value="">Selecione o atendente</option>
+                        {userLinkOptions.attendants.map((attendant) => (
+                          <option key={attendant.id} value={attendant.id}>
+                            {attendant.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <button
+                      type="submit"
+                      style={{
+                        marginTop: 4,
+                        background: P.accent,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "9px 10px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cadastrar usuário
+                    </button>
+                  </div>
+
+                  {userMgmtStatus.state !== "idle" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 12,
+                        color:
+                          userMgmtStatus.state === "success"
+                            ? P.green
+                            : userMgmtStatus.state === "error"
+                              ? P.red
+                              : P.dim,
+                      }}
+                    >
+                      {userMgmtStatus.message}
+                    </div>
+                  )}
+                </form>
+
+                <div
+                  style={{
+                    background: P.card,
+                    borderRadius: 14,
+                    border: `1px solid ${P.bdr}`,
+                    padding: 14,
+                    flex: "1 1 420px",
+                    minWidth: 340,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: P.dim,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Usuários cadastrados
+                  </div>
+                  {usersList.length === 0 ? (
+                    <div style={{ fontSize: 12, color: P.dim }}>
+                      Nenhum usuário cadastrado.
+                    </div>
+                  ) : (
+                    <Table
+                      headers={[
+                        "Usuário",
+                        "Perfil",
+                        "Atendente",
+                        "Ramal",
+                        "Responsável",
+                      ]}
+                      rows={usersList.map((u) => [
+                        u.username,
+                        u.role,
+                        u.attendantName || "-",
+                        u.attendantRamal || "-",
+                        u.attendantResponsavel || "-",
+                      ])}
+                    />
+                  )}
                 </div>
               </div>
             </Section>

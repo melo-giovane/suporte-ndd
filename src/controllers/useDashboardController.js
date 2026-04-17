@@ -22,7 +22,11 @@ function loadXlsxModule() {
   return xlsxModulePromise;
 }
 
-export function useDashboardController() {
+export function useDashboardController({
+  authToken,
+  viewScope = "own",
+  onUnauthorized,
+} = {}) {
   const [cons, setCons] = useState([]);
   const [atend, setAtend] = useState([]);
   const [tickets, setTickets] = useState([]);
@@ -49,13 +53,30 @@ export function useDashboardController() {
     state: "idle",
     message: "",
   });
+  const [teamTotals, setTeamTotals] = useState(null);
   const fileRef = useRef();
   const incrementalFileRef = useRef();
   const reprocessFileRef = useRef();
 
   const loadFromDatabase = useCallback(async () => {
+    if (!authToken) {
+      setIsRestoring(false);
+      return false;
+    }
+
     try {
-      const resp = await fetch(apiUrl("/api/dashboard-data"));
+      const query = viewScope === "team" ? "?scope=team" : "?scope=own";
+      const resp = await fetch(apiUrl(`/api/dashboard-data${query}`), {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (resp.status === 401 || resp.status === 403) {
+        onUnauthorized?.();
+        return false;
+      }
+
       if (!resp.ok) return false;
 
       const body = await resp.json();
@@ -75,19 +96,16 @@ export function useDashboardController() {
         dateReal: row.dataAbertura ? new Date(row.dataAbertura) : null,
       }));
 
-      if (!nextCons.length && !nextAtend.length && !nextTickets.length) {
-        return false;
-      }
-
       setCons(nextCons);
       setAtend(nextAtend);
       setTickets(nextTickets);
+      setTeamTotals(data.teamTotals || null);
       setLoaded(true);
       return true;
     } catch {
       return false;
     }
-  }, []);
+  }, [authToken, onUnauthorized, viewScope]);
 
   const restoreFromDatabaseWithRetry = useCallback(async () => {
     const maxAttempts = 8;
@@ -131,6 +149,9 @@ export function useDashboardController() {
         const resp = await fetch(apiUrl("/api/import-dashboard"), {
           method: "POST",
           body: fd,
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
         });
 
         if (!resp.ok) {
@@ -140,6 +161,9 @@ export function useDashboardController() {
             msg = body?.error || msg;
           } catch {
             // Ignore parse errors and keep generic message.
+          }
+          if (resp.status === 401 || resp.status === 403) {
+            throw new Error("Apenas usuários master podem atualizar o banco.");
           }
           throw new Error(msg);
         }
@@ -166,7 +190,7 @@ export function useDashboardController() {
         });
       }
     },
-    [loadFromDatabase],
+    [authToken, loadFromDatabase],
   );
 
   const handleFile = useCallback(
@@ -294,6 +318,7 @@ export function useDashboardController() {
     isRestoring,
     incrementalStatus,
     reprocessStatus,
+    teamTotals,
     fileRef,
     incrementalFileRef,
     reprocessFileRef,

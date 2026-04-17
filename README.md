@@ -32,6 +32,30 @@ Se quiser rodar apenas o frontend (sem persistencia no banco), use:
 npm run dev:web
 ```
 
+## Autenticacao e perfis
+
+O sistema agora possui login com dois perfis:
+
+- `master`
+  - acesso completo ao dashboard
+  - pode atualizar/importar dados
+  - pode cadastrar novos usuarios
+- `atendente`
+  - pode acessar apenas seus atendimentos/tickets proprios
+  - pode alternar para visualizar totais da equipe
+
+No primeiro start com banco novo, um usuario master inicial e criado automaticamente:
+
+- usuario: `master`
+- senha: `master123`
+
+Voce pode sobrescrever esses valores via variaveis de ambiente:
+
+- `DEFAULT_MASTER_USER`
+- `DEFAULT_MASTER_PASSWORD`
+
+Recomendado: criar um novo master e trocar a senha inicial apos o primeiro acesso.
+
 ## Banco SQLite (separado do frontend)
 
 ### 1. Inicializar schema
