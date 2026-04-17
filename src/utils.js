@@ -26,7 +26,7 @@ export function parseDataPt(s) {
   for (const [m, n] of Object.entries(MONTHS_PT)) {
     if (s.includes(m)) {
       const d = parseInt(s);
-      if (d) return new Date(2026, n - 1, d);
+      if (d) return new Date(new Date().getFullYear(), n - 1, d);
     }
   }
   return null;

@@ -2,7 +2,7 @@
 
 Dashboard React para analise operacional da Central de Relacionamentos (telefonia + tickets), com API local em Express e persistencia historica em SQLite para carga e atualizacao diaria.
 
-- Versao atual: `2.0.0`
+- Versao atual: `3.3.0`
 - Autor: `Giovane Melo`
 
 ## Novidades recentes

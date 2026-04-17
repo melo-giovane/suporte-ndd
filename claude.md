@@ -33,10 +33,13 @@ Dominio: Central de Relacionamentos (telefonia Atplus + tickets Ellevo), com ent
 2. API local (Express)
 
 - arquivo: `server/api.js`
-- endpoints:
+- autenticacao: `scripts/db/auth.js`
+- endpoints principais:
+  - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/me`
+  - `GET /api/users` / `GET /api/users/link-options` / `POST /api/users` (master only)
   - `GET /api/health`
   - `GET /api/dashboard-data`
-  - `POST /api/import-dashboard` (multipart com campo `file`)
+  - `POST /api/import-dashboard` (multipart, master only)
 
 3. Persistencia (SQLite)
 
@@ -77,12 +80,13 @@ central-relacionamentos/
 
 ## 3. Fluxo de Dados v2
 
-1. Usuario faz upload de `.xlsx` no frontend.
-2. Frontend processa o workbook localmente para exibicao imediata.
-3. Em paralelo, frontend envia o mesmo arquivo para `POST /api/import-dashboard`.
-4. API valida extensao, salva upload e chama `importDashboardToSqlite()`.
-5. ETL faz parse das abas e grava no SQLite com `INSERT ... ON CONFLICT DO UPDATE`.
-6. Frontend pode restaurar/atualizar estado via `GET /api/dashboard-data`.
+1. Usuario autentica via `POST /api/auth/login` e recebe token de sessao.
+2. Frontend carrega dados do banco via `GET /api/dashboard-data` (token Bearer).
+3. Usuario master faz upload de `.xlsx` no frontend.
+4. Frontend envia o arquivo para `POST /api/import-dashboard`.
+5. API valida extensao, salva upload e chama `importDashboardToSqlite()`.
+6. ETL faz parse das abas e grava no SQLite com `INSERT ... ON CONFLICT DO UPDATE`.
+7. Frontend recarrega estado via `GET /api/dashboard-data`.
 
 Modo incremental:
 
@@ -94,12 +98,18 @@ Modo incremental:
 
 ### 4.1 Estado principal (controller)
 
+Assinatura: `useDashboardController({ authToken, viewScope, canUpload, onUnauthorized })`
+
 - dados brutos em memoria: `cons`, `atend`, `tickets`
 - filtros: `dateFrom`, `dateTo`
 - navegacao: `tab`
-- status de persistencia: `saveStatus`, `incrementalStatus`
+- visibilidade de series: `seriesVis`
+- metrica selecionada: `metricSel`
+- flag de carregamento: `loaded`
+- status de persistencia: `saveStatus`, `incrementalStatus`, `reprocessStatus`
 - carregamento de banco: `isRestoring`
-- upload local: parse de workbook via import dinamico de `xlsx` (lazy)
+- totais agregados da equipe (scope team): `teamTotals`
+- refs de upload: `incrementalFileRef`, `reprocessFileRef`
 
 ### 4.2 Calculos e agregacoes (model)
 
@@ -119,26 +129,69 @@ Modo incremental:
 
 ---
 
-## 5. API Local
+## 5. Autenticacao e Perfis
+
+Arquivo: `scripts/db/auth.js`
+
+Autenticacao por sessao em memoria (Map no processo Express). Token Bearer enviado em cada requisicao.
+
+Perfis:
+- `master`: acesso completo, pode importar dados e gerenciar usuarios.
+- `atendente`: acesso limitado aos proprios atendimentos/tickets; pode alternar para ver totais da equipe.
+
+No primeiro start com banco novo, um usuario master inicial e criado automaticamente (sobrescrevivel via `DEFAULT_MASTER_USER` / `DEFAULT_MASTER_PASSWORD`).
+
+---
+
+## 6. API Local
 
 Arquivo: `server/api.js`
+
+### Autenticacao
+
+- `POST /api/auth/login`
+  - body: `{ username, password }`
+  - retorna: `{ token, user }`
+
+- `POST /api/auth/logout`
+  - requer Bearer token; invalida a sessao.
+
+- `GET /api/auth/me`
+  - retorna dados do usuario autenticado.
+
+### Gestao de usuarios (master only)
+
+- `GET /api/users`
+  - lista todos os usuarios.
+
+- `GET /api/users/link-options`
+  - lista atendentes disponiveis para vincular a um usuario.
+
+- `POST /api/users`
+  - body: `{ username, password, role, attendantId }`
+  - cria novo usuario; para perfil `atendente`, `attendantId` e obrigatorio.
+
+### Dashboard
 
 - `GET /api/health`
   - healthcheck simples.
 
 - `GET /api/dashboard-data`
-  - le dados das tabelas `atplus_cons_daily`, `atplus_attendant_daily`, `ellevo_tickets` e ultimo `import_runs`.
+  - requer Bearer token;
+  - query: `?scope=own|team` (master sempre recebe `team`);
+  - le dados das tabelas `atplus_cons_daily`, `atplus_attendant_daily`, `ellevo_tickets` e ultimo `import_runs`;
+  - retorna tambem `teamTotals` (agregado geral sem filtro de data).
 
 - `POST /api/import-dashboard`
-  - upload via multer (limite 25 MB);
+  - master only; upload via multer (limite 25 MB);
   - aceita `.xlsx` e `.xls`;
   - opcional: `year` e `onlyNew`.
 
 ---
 
-## 6. SQLite e ETL
+## 7. SQLite e ETL
 
-### 6.1 Banco
+### 7.1 Banco
 
 - caminho padrao: `data/sqlite/central_relacionamentos.db`
 - tabelas:
@@ -147,13 +200,13 @@ Arquivo: `server/api.js`
   - `atplus_attendant_daily`
   - `ellevo_tickets`
 
-### 6.2 Chaves e idempotencia
+### 7.2 Chaves e idempotencia
 
 - `atplus_cons_daily`: `UNIQUE (data_key, fila)`
 - `atplus_attendant_daily`: `UNIQUE (data_key, fila, ramal)`
 - `ellevo_tickets`: `chamado` unico
 
-### 6.3 Entrada esperada
+### 7.3 Entrada esperada
 
 Workbook com abas:
 
@@ -163,7 +216,7 @@ Workbook com abas:
 
 Leitura via `sheet_to_json(..., { header: 1, range: 3 })`, ou seja, dados a partir da linha 4.
 
-### 6.4 Comandos principais
+### 7.4 Comandos principais
 
 ```bash
 npm run dev
@@ -176,7 +229,7 @@ npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
 
 ---
 
-## 7. Arquivos de Referencia
+## 8. Arquivos de Referencia
 
 - fluxo funcional do produto: `Dashboard_Central_Documentacao.md`
 - operacao ETL SQLite: `docs/sqlite-etl.md`
@@ -184,16 +237,17 @@ npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
 - controller principal: `src/controllers/useDashboardController.js`
 - modelo de transformacoes: `src/models/dashboardModel.js`
 - API local: `server/api.js`
+- autenticacao: `scripts/db/auth.js`
 
 ---
 
-## 8. Limitacoes Conhecidas (estado atual)
+## 9. Limitacoes Conhecidas (estado atual)
 
 - entrada oficial ainda depende do Excel consolidado (nao ha ingestao direta de CSV Atplus nesta camada).
 - regras de categorizacao e mapeamento de agentes sao estaticas em codigo.
-- parsing de datas pt-BR sem ano depende de ano de referencia enviado/assumido.
+- parsing de datas pt-BR sem ano usa `new Date().getFullYear()` — dados que cruzam virada de ano podem precisar de ajuste manual.
 
-## 9. Atualizacoes recentes (16/04/2026)
+## 10. Atualizacoes recentes (16/04/2026)
 
 - Indicadores da aba Resumo ajustados em Telefonia:
   - card de chamadas com foco em atendidas
@@ -210,18 +264,18 @@ npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
 
 ---
 
-## 10. Resumo da Evolucao para v2
+## 11. Resumo da Evolucao para v3
 
-Comparado ao desenho anterior, o sistema agora:
+Comparado ao desenho v2, o sistema agora:
 
-- nao e mais apenas visualizacao client-side;
-- possui API para ingestao e restauracao de dados;
-- grava historico em SQLite com importacao idempotente;
-- suporta rotina de atualizacao diaria sem duplicar dados.
+- possui autenticacao por perfis (`master` e `atendente`);
+- atendente ve apenas seus proprios dados (ou totais da equipe);
+- frontend carrega dados exclusivamente do banco (sem parse local do xlsx);
+- `teamTotals` retornado pela API para comparacao sem filtro de data.
 
 ---
 
-## 14. INSTRUCOES PARA EDICAO CONTINUA
+## 12. INSTRUCOES PARA EDICAO CONTINUA
 
 Ao modificar o frontend:
 
