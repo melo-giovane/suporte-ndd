@@ -46,6 +46,7 @@ export function useDashboardController({
   const [tab, setTab] = useState("resumo");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [dayTypeFilter, setDayTypeFilter] = useState("all");
   const [seriesVis, setSeriesVis] = useState({
     lig: true,
     transf: true,
@@ -294,16 +295,16 @@ export function useDashboardController({
   );
 
   const fCons = useMemo(
-    () => filterByDateRange(cons, dateFrom, dateTo),
-    [cons, dateFrom, dateTo],
+    () => filterByDateRange(cons, dateFrom, dateTo, dayTypeFilter),
+    [cons, dateFrom, dateTo, dayTypeFilter],
   );
   const fAtend = useMemo(
-    () => filterByDateRange(atend, dateFrom, dateTo),
-    [atend, dateFrom, dateTo],
+    () => filterByDateRange(atend, dateFrom, dateTo, dayTypeFilter),
+    [atend, dateFrom, dateTo, dayTypeFilter],
   );
   const fTickets = useMemo(
-    () => filterByDateRange(tickets, dateFrom, dateTo),
-    [tickets, dateFrom, dateTo],
+    () => filterByDateRange(tickets, dateFrom, dateTo, dayTypeFilter),
+    [tickets, dateFrom, dateTo, dayTypeFilter],
   );
 
   const kpis = useMemo(() => buildKpis(fCons, fTickets), [fCons, fTickets]);
@@ -356,6 +357,7 @@ export function useDashboardController({
     tab,
     dateFrom,
     dateTo,
+    dayTypeFilter,
     seriesVis,
     metricSel,
     saveStatus,
@@ -379,6 +381,7 @@ export function useDashboardController({
     setTab,
     setDateFrom,
     setDateTo,
+    setDayTypeFilter,
     setSeriesVis,
     setMetricSel,
     setSaveStatus,

@@ -472,6 +472,7 @@ export default function App() {
     tab,
     dateFrom,
     dateTo,
+    dayTypeFilter,
     seriesVis,
     metricSel,
     saveStatus,
@@ -494,6 +495,7 @@ export default function App() {
     setTab,
     setDateFrom,
     setDateTo,
+    setDayTypeFilter,
     setSeriesVis,
     setMetricSel,
     handleIncrementalFile,
@@ -1124,13 +1126,12 @@ export default function App() {
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
+            alignItems: "flex-start",
             gap: 12,
             marginBottom: 16,
           }}
         >
-          <div>
+          <div style={{ flexShrink: 0 }}>
             <h1
               style={{
                 fontSize: 20,
@@ -1182,50 +1183,6 @@ export default function App() {
             >
               {authUser?.username} · {isMaster ? "Master" : "Atendente"}
             </span>
-            <div
-              style={{
-                display: "flex",
-                background: P.cardH,
-                borderRadius: 7,
-                border: `1px solid ${P.bdr}`,
-                overflow: "hidden",
-              }}
-            >
-              <button
-                onClick={() => {
-                  P = DARK_THEME;
-                  PIE_C = PIE_C_DARK;
-                  setThemeMode("dark");
-                }}
-                style={{
-                  border: "none",
-                  background: themeMode === "dark" ? P.accent : "transparent",
-                  color: themeMode === "dark" ? "#fff" : P.dim,
-                  padding: "4px 8px",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                Dark
-              </button>
-              <button
-                onClick={() => {
-                  P = LIGHT_THEME;
-                  PIE_C = PIE_C_LIGHT;
-                  setThemeMode("light");
-                }}
-                style={{
-                  border: "none",
-                  background: themeMode === "light" ? P.accent : "transparent",
-                  color: themeMode === "light" ? "#fff" : P.dim,
-                  padding: "4px 8px",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                Light
-              </button>
-            </div>
             {isAttendant && (
               <div
                 style={{
@@ -1298,11 +1255,29 @@ export default function App() {
                 fontSize: 12,
               }}
             />
-            {(dateFrom || dateTo) && (
+            <select
+              value={dayTypeFilter}
+              onChange={(e) => setDayTypeFilter(e.target.value)}
+              style={{
+                background: P.cardH,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 6,
+                padding: "4px 8px",
+                color: P.text,
+                fontSize: 12,
+              }}
+            >
+              <option value="all">Todos</option>
+              <option value="weekdays">Dias úteis</option>
+              <option value="holidays">Feriados</option>
+              <option value="weekends">Finais de semana</option>
+            </select>
+            {(dateFrom || dateTo || dayTypeFilter !== "all") && (
               <button
                 onClick={() => {
                   setDateFrom("");
                   setDateTo("");
+                  setDayTypeFilter("all");
                 }}
                 style={{
                   background: P.red,
@@ -1428,6 +1403,52 @@ export default function App() {
               onSelect={setTab}
             />
           )}
+          <div
+            style={{
+              display: "flex",
+              background: P.cardH,
+              borderRadius: 7,
+              border: `1px solid ${P.bdr}`,
+              overflow: "hidden",
+              marginLeft: "auto",
+              alignSelf: "center",
+            }}
+          >
+            <button
+              onClick={() => {
+                P = DARK_THEME;
+                PIE_C = PIE_C_DARK;
+                setThemeMode("dark");
+              }}
+              style={{
+                border: "none",
+                background: themeMode === "dark" ? P.accent : "transparent",
+                color: themeMode === "dark" ? "#fff" : P.dim,
+                padding: "4px 8px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Dark
+            </button>
+            <button
+              onClick={() => {
+                P = LIGHT_THEME;
+                PIE_C = PIE_C_LIGHT;
+                setThemeMode("light");
+              }}
+              style={{
+                border: "none",
+                background: themeMode === "light" ? P.accent : "transparent",
+                color: themeMode === "light" ? "#fff" : P.dim,
+                padding: "4px 8px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              Light
+            </button>
+          </div>
         </div>
 
         {tab === "resumo" && (

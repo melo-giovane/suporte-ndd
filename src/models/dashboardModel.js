@@ -23,6 +23,114 @@ const MONTH_LABELS = [
   ["Dezembro", "Dez"],
 ];
 
+const FIXED_HOLIDAYS_MMDD = new Set([
+  "01-01", // Confraternizacao Universal
+  "04-21", // Tiradentes
+  "05-01", // Dia do Trabalhador
+  "09-07", // Independencia do Brasil
+  "10-12", // Nossa Senhora Aparecida
+  "11-02", // Finados
+  "11-15", // Proclamacao da Republica
+  "11-20", // Dia da Consciencia Negra
+  "12-25", // Natal
+]);
+
+const holidayCacheByYear = new Map();
+
+function toIsoDateKey(date) {
+  const yyyy = date.getFullYear();
+  const mm = `${date.getMonth() + 1}`.padStart(2, "0");
+  const dd = `${date.getDate()}`.padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDays(baseDate, days) {
+  const next = new Date(baseDate);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function computeEasterSunday(year) {
+  // Gregorian algorithm (Meeus/Jones/Butcher)
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function getHolidaySet(year) {
+  if (holidayCacheByYear.has(year)) {
+    return holidayCacheByYear.get(year);
+  }
+
+  const set = new Set();
+
+  FIXED_HOLIDAYS_MMDD.forEach((mmdd) => {
+    set.add(`${year}-${mmdd}`);
+  });
+
+  const easterSunday = computeEasterSunday(year);
+  const carnivalMonday = addDays(easterSunday, -48);
+  const carnivalTuesday = addDays(easterSunday, -47);
+  const goodFriday = addDays(easterSunday, -2);
+  const corpusChristi = addDays(easterSunday, 60);
+
+  [carnivalMonday, carnivalTuesday, goodFriday, corpusChristi].forEach((d) => {
+    set.add(toIsoDateKey(d));
+  });
+
+  holidayCacheByYear.set(year, set);
+  return set;
+}
+
+function normalizeDayTypeFilter(dayType) {
+  const normalized = String(dayType || "all")
+    .trim()
+    .toLowerCase();
+  if (
+    normalized !== "all" &&
+    normalized !== "weekdays" &&
+    normalized !== "weekends" &&
+    normalized !== "holidays"
+  ) {
+    return "all";
+  }
+  return normalized;
+}
+
+function matchDayTypeFilter(date, dayType = "all") {
+  const mode = normalizeDayTypeFilter(dayType);
+  if (mode === "all") return true;
+
+  const weekDay = date.getDay();
+  const isWeekend = weekDay === 0 || weekDay === 6;
+
+  if (mode === "weekends") {
+    return isWeekend;
+  }
+
+  const holidaySet = getHolidaySet(date.getFullYear());
+  const isHoliday = holidaySet.has(toIsoDateKey(date));
+
+  if (mode === "holidays") {
+    return isHoliday;
+  }
+
+  // weekdays mode
+  return !isWeekend && !isHoliday;
+}
+
 export function parseWorkbookData(XLSX, workbook) {
   const nextCons = [];
   const nextAtend = [];
@@ -147,9 +255,10 @@ function parseDateFilterInput(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export function filterByDateRange(items, dateFrom, dateTo) {
+export function filterByDateRange(items, dateFrom, dateTo, dayType = "all") {
   const df = parseDateFilterInput(dateFrom);
   const dt = parseDateFilterInput(dateTo);
+  const mode = normalizeDayTypeFilter(dayType);
 
   return items.filter((item) => {
     const d =
@@ -159,7 +268,7 @@ export function filterByDateRange(items, dateFrom, dateTo) {
           ? new Date(item.dateReal)
           : null;
 
-    if (!d || Number.isNaN(d.getTime())) return true;
+    if (!d || Number.isNaN(d.getTime())) return mode === "all";
 
     if (df && d < df) return false;
     if (dt) {
@@ -167,7 +276,7 @@ export function filterByDateRange(items, dateFrom, dateTo) {
       end.setHours(23, 59, 59, 999);
       if (d > end) return false;
     }
-    return true;
+    return matchDayTypeFilter(d, mode);
   });
 }
 
