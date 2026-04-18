@@ -38,4 +38,9 @@ describe("filterByDateRange dayType", () => {
     const out = filterByDateRange(base, "2026-04-20", "2026-04-22", "weekdays");
     expect(out.map((item) => item.id)).toEqual(["weekday"]);
   });
+
+  it("remove registros sem data válida quando há filtro de período", () => {
+    const out = filterByDateRange(base, "2026-04-20", "2026-04-30", "all");
+    expect(out.map((item) => item.id)).toEqual(["weekday", "holiday"]);
+  });
 });

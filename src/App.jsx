@@ -432,6 +432,7 @@ export default function App() {
     attendants: [],
   });
   const [expandedTelefoniaDays, setExpandedTelefoniaDays] = useState({});
+  const [hourlyVolumeMode, setHourlyVolumeMode] = useState("volume");
 
   const isMaster = authUser?.role === "master";
   const isAttendant = authUser?.role === "atendente";
@@ -717,6 +718,7 @@ export default function App() {
     fCons.forEach((row) => {
       const hour = resolveHourFromConsEntry(row);
       if (hour === null) return;
+      const dayKey = resolveDayGroupFromConsEntry(row)?.key;
 
       const current = buckets.get(hour) || {
         hora: hour,
@@ -725,6 +727,7 @@ export default function App() {
         naoAtendidas: 0,
         abandonadas: 0,
         registros: 0,
+        dayKeys: new Set(),
       };
 
       current.total += Number(row.total) || 0;
@@ -732,6 +735,9 @@ export default function App() {
       current.naoAtendidas += Number(row.naoAtendidas) || 0;
       current.abandonadas += Number(row.abandonadas) || 0;
       current.registros += 1;
+      if (dayKey) {
+        current.dayKeys.add(dayKey);
+      }
 
       buckets.set(hour, current);
     });
@@ -739,11 +745,20 @@ export default function App() {
     return Array.from(buckets.values())
       .sort((a, b) => a.hora - b.hora)
       .map((row) => {
+        const { dayKeys, ...baseRow } = row;
+        const daysCount = dayKeys.size || row.registros || 0;
         const indisponiveis = row.naoAtendidas + row.abandonadas;
         return {
-          ...row,
+          ...baseRow,
           horaLabel: `${String(row.hora).padStart(2, "0")}:00`,
           indisponiveis,
+          daysCount,
+          mediaTotalHora: daysCount
+            ? Math.round((row.total / daysCount) * 10) / 10
+            : 0,
+          mediaAtendidasHora: daysCount
+            ? Math.round((row.atendidas / daysCount) * 10) / 10
+            : 0,
           txAtend: row.total ? row.atendidas / row.total : 0,
           txAbandono: row.total ? indisponiveis / row.total : 0,
         };
@@ -1903,7 +1918,41 @@ export default function App() {
             ) : (
               <>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                  <ChartCard title="Volume de Ligações por Hora" h={260}>
+                  <ChartCard title="Ligações por Hora" h={260}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        marginBottom: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {[
+                        { id: "volume", label: "Volume" },
+                        { id: "media", label: "Média/Hora" },
+                      ].map((option) => {
+                        const isActive = hourlyVolumeMode === option.id;
+                        return (
+                          <button
+                            key={option.id}
+                            onClick={() => setHourlyVolumeMode(option.id)}
+                            style={{
+                              border: `1px solid ${isActive ? P.accent : P.bdr}`,
+                              background: isActive ? `${P.accent}22` : P.card,
+                              color: isActive ? P.text : P.dim,
+                              borderRadius: 999,
+                              padding: "4px 10px",
+                              fontSize: 10,
+                              fontWeight: 700,
+                              letterSpacing: 0.4,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <ResponsiveContainer>
                       <BarChart data={hourlyActivity} barGap={3}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
@@ -1913,24 +1962,46 @@ export default function App() {
                         />
                         <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                         <Tooltip content={<TT />} />
-                        <Bar
-                          dataKey="total"
-                          name="Total"
-                          fill={P.accent}
-                          radius={[4, 4, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="atendidas"
-                          name="Atendidas"
-                          fill={P.green}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        {hourlyVolumeMode === "volume" ? (
+                          <>
+                            <Bar
+                              dataKey="total"
+                              name="Total"
+                              fill={P.accent}
+                              radius={[4, 4, 0, 0]}
+                            />
+                            <Bar
+                              dataKey="atendidas"
+                              name="Atendidas"
+                              fill={P.green}
+                              radius={[4, 4, 0, 0]}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <Bar
+                              dataKey="mediaTotalHora"
+                              name="Média Total"
+                              fill={P.accent}
+                              radius={[4, 4, 0, 0]}
+                            />
+                            <Bar
+                              dataKey="mediaAtendidasHora"
+                              name="Média Atendidas"
+                              fill={P.green}
+                              radius={[4, 4, 0, 0]}
+                            />
+                          </>
+                        )}
                         <Legend wrapperStyle={{ fontSize: 10 }} />
                       </BarChart>
                     </ResponsiveContainer>
                   </ChartCard>
 
-                  <ChartCard title="Taxas por Hora" h={260}>
+                  <ChartCard
+                    title="Taxa de abandono/Não atendidas por hora"
+                    h={260}
+                  >
                     <ResponsiveContainer>
                       <LineChart data={hourlyActivity}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
@@ -1944,14 +2015,6 @@ export default function App() {
                           tickFormatter={(v) => fmtPct(v)}
                         />
                         <Tooltip content={<TT />} />
-                        <Line
-                          type="monotone"
-                          dataKey="txAtend"
-                          name="Tx Atend."
-                          stroke={P.green}
-                          strokeWidth={2}
-                          dot={{ r: 2 }}
-                        />
                         <Line
                           type="monotone"
                           dataKey="txAbandono"

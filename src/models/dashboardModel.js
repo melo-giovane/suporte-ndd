@@ -259,6 +259,7 @@ export function filterByDateRange(items, dateFrom, dateTo, dayType = "all") {
   const df = parseDateFilterInput(dateFrom);
   const dt = parseDateFilterInput(dateTo);
   const mode = normalizeDayTypeFilter(dayType);
+  const hasDateRange = Boolean(df || dt);
 
   return items.filter((item) => {
     const d =
@@ -268,7 +269,9 @@ export function filterByDateRange(items, dateFrom, dateTo, dayType = "all") {
           ? new Date(item.dateReal)
           : null;
 
-    if (!d || Number.isNaN(d.getTime())) return mode === "all";
+    if (!d || Number.isNaN(d.getTime())) {
+      return !hasDateRange && mode === "all";
+    }
 
     if (df && d < df) return false;
     if (dt) {
