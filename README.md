@@ -26,6 +26,37 @@ npm run dev
 
 O comando acima sobe frontend + API local juntos, permitindo salvamento automatico no SQLite ao fazer drop/click na tela inicial.
 
+Para iniciar tudo e abrir o navegador automaticamente no frontend, use:
+
+```bash
+npm run dev:open
+```
+
+Se estiver no VS Code, use o atalho de tarefa:
+
+- `Ctrl+Shift+B` -> `Iniciar app (dev + abrir frontend)`
+
+No Windows Explorer, voce tambem pode abrir direto com duplo clique no arquivo:
+
+- `Iniciar-Central.cmd`
+
+### Sincronizacao automatica no login master
+
+Ao fazer login com perfil `master`, a API verifica automaticamente se a planilha abaixo foi atualizada:
+
+- `C:\Users\geovane.melo\OneDrive - NDD.Tech\Documentos\NDD Cargo\Relatorios\Dashboard_Central.xlsx`
+
+Regra:
+
+- se a data de modificacao da planilha for mais nova que a ultima importacao desse mesmo arquivo, a importacao e executada automaticamente;
+- se nao houve mudanca, nada e reimportado.
+
+Configuracoes opcionais por variavel de ambiente:
+
+- `MASTER_AUTO_SYNC_ENABLED=false` para desativar;
+- `MASTER_AUTO_SYNC_FILE="caminho\da\planilha.xlsx"` para trocar o arquivo monitorado;
+- `MASTER_AUTO_SYNC_YEAR=2026` para fixar o ano de referencia do parser.
+
 Se quiser rodar apenas o frontend (sem persistencia no banco), use:
 
 ```bash

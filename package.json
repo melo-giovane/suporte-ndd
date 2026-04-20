@@ -8,6 +8,8 @@
     "dev": "concurrently \"npm:dev:web\" \"npm:dev:api\"",
     "dev:web": "vite",
     "dev:api": "node server/api.js",
+    "open:web": "wait-on http://localhost:5173 && cmd /c start \"\" \"http://localhost:5173\"",
+    "dev:open": "concurrently --kill-others-on-fail \"npm:dev\" \"npm:open:web\"",
     "dev:full": "npm run dev",
     "build": "vite build",
     "test": "vitest run",
@@ -38,8 +40,10 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
+    "open": "^11.0.0",
     "typescript": "^5.7.3",
     "vite": "^8.0.4",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "wait-on": "^9.0.5"
   }
 }

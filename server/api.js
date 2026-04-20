@@ -16,6 +16,14 @@ const PORT = Number.parseInt(process.env.API_PORT || "8787", 10);
 const uploadDir = path.resolve(PROJECT_ROOT, "data/input/uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 const sessions = new Map();
+const DEFAULT_MASTER_AUTO_SYNC_FILE =
+  "C:\\Users\\geovane.melo\\OneDrive - NDD.Tech\\Documentos\\NDD Cargo\\Relat\u00F3rios\\Dashboard_Central.xlsx";
+const MASTER_AUTO_SYNC_FILE = path.resolve(
+  process.env.MASTER_AUTO_SYNC_FILE || DEFAULT_MASTER_AUTO_SYNC_FILE,
+);
+const MASTER_AUTO_SYNC_ENABLED =
+  String(process.env.MASTER_AUTO_SYNC_ENABLED || "true").toLowerCase() !==
+  "false";
 
 app.use(express.json());
 
@@ -32,6 +40,80 @@ function sanitizeUser(row) {
       row.attendant_tickets_alias || row.attendant_responsavel || null,
     isActive: row.is_active === 1,
     createdAt: row.created_at || null,
+  };
+}
+
+function parseReferenceYear(rawYear) {
+  const parsed = Number.parseInt(String(rawYear || ""), 10);
+  return Number.isInteger(parsed) ? parsed : new Date().getFullYear();
+}
+
+function syncMasterWorkbookIfNeeded() {
+  if (!MASTER_AUTO_SYNC_ENABLED) {
+    return { status: "disabled" };
+  }
+
+  if (!fs.existsSync(MASTER_AUTO_SYNC_FILE)) {
+    return {
+      status: "missing-file",
+      sourceFile: MASTER_AUTO_SYNC_FILE,
+    };
+  }
+
+  const sourceStat = fs.statSync(MASTER_AUTO_SYNC_FILE);
+  const sourceMtimeMs = sourceStat.mtime.getTime();
+
+  let db;
+  try {
+    db = openDatabase();
+    ensureSchema(db);
+
+    const latestRun = db
+      .prepare(
+        `
+        SELECT
+          source_file_mtime AS sourceFileMtime,
+          imported_at AS importedAt
+        FROM import_runs
+        WHERE source_file = ?
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+      )
+      .get(MASTER_AUTO_SYNC_FILE);
+
+    const importedMtimeMs = latestRun?.sourceFileMtime
+      ? Date.parse(latestRun.sourceFileMtime)
+      : Number.NaN;
+
+    const isUpToDate =
+      Number.isFinite(importedMtimeMs) && importedMtimeMs >= sourceMtimeMs;
+
+    if (isUpToDate) {
+      return {
+        status: "up-to-date",
+        sourceFile: MASTER_AUTO_SYNC_FILE,
+        importedAt: latestRun?.importedAt || null,
+      };
+    }
+  } finally {
+    if (db) db.close();
+  }
+
+  const referenceYear = parseReferenceYear(
+    process.env.MASTER_AUTO_SYNC_YEAR || new Date().getFullYear(),
+  );
+
+  const result = importDashboardToSqlite({
+    inputFile: MASTER_AUTO_SYNC_FILE,
+    referenceYear,
+    onlyNew: false,
+  });
+
+  return {
+    status: "imported",
+    sourceFile: MASTER_AUTO_SYNC_FILE,
+    result,
   };
 }
 
@@ -432,6 +514,26 @@ app.post("/api/auth/login", (req, res) => {
       return res
         .status(401)
         .json({ ok: false, error: "Credenciais inválidas." });
+    }
+
+    if (userRow.role === "master") {
+      try {
+        const syncState = syncMasterWorkbookIfNeeded();
+
+        if (syncState.status === "imported") {
+          console.log(
+            `[api] Auto-sync master executado: ${syncState.result.consRows} cons, ${syncState.result.atendRows} atend, ${syncState.result.ticketRows} tickets (${syncState.sourceFile})`,
+          );
+        } else if (syncState.status === "missing-file") {
+          console.warn(
+            `[api] Auto-sync master ignorado: arquivo não encontrado em ${syncState.sourceFile}`,
+          );
+        }
+      } catch (syncError) {
+        console.error(
+          `[api] Falha no auto-sync master: ${syncError instanceof Error ? syncError.message : "Erro desconhecido"}`,
+        );
+      }
     }
 
     const token = createSessionToken();
