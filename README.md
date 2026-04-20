@@ -44,7 +44,7 @@ No Windows Explorer, voce tambem pode abrir direto com duplo clique no arquivo:
 
 Ao fazer login com perfil `master`, a API verifica automaticamente se a planilha abaixo foi atualizada:
 
-- `C:\Users\geovane.melo\OneDrive - NDD.Tech\Documentos\NDD Cargo\Relatorios\Dashboard_Central.xlsx`
+- `C:\Users\geovane.melo\OneDrive - NDD.Tech\Documentos\NDD Cargo\Relatórios\Dashboard_Central.xlsx`
 
 Regra:
 
