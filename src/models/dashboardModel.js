@@ -336,7 +336,7 @@ function resolveHourFromConsItem(item) {
     : null;
 }
 
-function pickConsRowsForKpisByDay(items) {
+export function pickConsRowsForKpisByDay(items) {
   const groups = new Map();
 
   items.forEach((item, index) => {

@@ -14,6 +14,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import { pickConsRowsForKpisByDay } from "../models/dashboardModel.js";
 import { isTransferencia, isErroApp } from "../utils.js";
 
 export default function ResumoTab({
@@ -58,8 +59,9 @@ export default function ResumoTab({
   const dailyCallsEvolution = useMemo(() => {
     if (dailyCallsAgentSel === "__ALL__") {
       const byDay = new Map();
+      const baseCons = pickConsRowsForKpisByDay(fCons);
 
-      fCons.forEach((c) => {
+      baseCons.forEach((c) => {
         const d = c.dateReal;
         if (!d || Number.isNaN(d.getTime())) return;
 
@@ -102,8 +104,10 @@ export default function ResumoTab({
     }
 
     const byDay = new Map();
-    fAtend.forEach((a) => {
-      if (a.ramal !== dailyCallsAgentSel) return;
+    const filteredAtend = fAtend.filter((a) => a.ramal === dailyCallsAgentSel);
+    const baseAtend = pickConsRowsForKpisByDay(filteredAtend);
+
+    baseAtend.forEach((a) => {
       const d = a.dateReal;
       if (!d || Number.isNaN(d.getTime())) return;
 

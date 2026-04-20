@@ -111,6 +111,9 @@ const INITIAL_THEME_MODE =
     ? "light"
     : "dark";
 
+let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
+let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
+
 const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
 
 const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
@@ -405,8 +408,6 @@ function resolveDayGroupFromTicketEntry(entry) {
 
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
-  const P = themeMode === "light" ? LIGHT_THEME : DARK_THEME;
-  const PIE_C = themeMode === "light" ? PIE_C_LIGHT : PIE_C_DARK;
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [pendingTicketListScroll, setPendingTicketListScroll] = useState(false);
@@ -1637,6 +1638,8 @@ export default function App() {
           >
             <button
               onClick={() => {
+                P = DARK_THEME;
+                PIE_C = PIE_C_DARK;
                 setThemeMode("dark");
               }}
               style={{
@@ -1652,6 +1655,8 @@ export default function App() {
             </button>
             <button
               onClick={() => {
+                P = LIGHT_THEME;
+                PIE_C = PIE_C_LIGHT;
                 setThemeMode("light");
               }}
               style={{
