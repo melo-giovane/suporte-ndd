@@ -320,21 +320,69 @@ function buildDayKey(item) {
   return raw;
 }
 
+function resolveHourFromConsItem(item) {
+  const fromField = Number.parseInt(String(item?.hora ?? ""), 10);
+  if (Number.isInteger(fromField) && fromField >= 0 && fromField <= 23) {
+    return fromField;
+  }
+
+  const label = String(item?.data || "").trim();
+  const match = label.match(/(?:\s|^)([01]?\d|2[0-3])(?::\d{2})?(?::\d{2})?$/);
+  if (!match) return null;
+
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 23
+    ? parsed
+    : null;
+}
+
+function pickConsRowsForKpisByDay(items) {
+  const groups = new Map();
+
+  items.forEach((item, index) => {
+    const dayKey = buildDayKey(item) || `__row-${index}`;
+    if (!groups.has(dayKey)) {
+      groups.set(dayKey, []);
+    }
+    groups.get(dayKey).push(item);
+  });
+
+  return Array.from(groups.values()).flatMap((rows) => {
+    const hasHourlyRows = rows.some(
+      (row) => resolveHourFromConsItem(row) !== null,
+    );
+    return hasHourlyRows
+      ? rows.filter((row) => resolveHourFromConsItem(row) !== null)
+      : rows;
+  });
+}
+
 export function buildKpis(fCons, fTickets) {
-  const tc = fCons.reduce((a, c) => a + c.total, 0);
-  const ta = fCons.reduce((a, c) => a + c.atendidas, 0);
-  const tab = fCons.reduce((a, c) => a + c.abandonadas + c.naoAtendidas, 0);
+  const baseCons = pickConsRowsForKpisByDay(fCons);
+
+  const tc = baseCons.reduce((a, c) => a + (Number(c.total) || 0), 0);
+  const ta = baseCons.reduce((a, c) => a + (Number(c.atendidas) || 0), 0);
+  const tab = baseCons.reduce(
+    (a, c) => a + (Number(c.abandonadas) || 0) + (Number(c.naoAtendidas) || 0),
+    0,
+  );
   const uniqueDays = new Set();
-  fCons.forEach((item) => {
+  baseCons.forEach((item) => {
     const key = buildDayKey(item);
     if (key) uniqueDays.add(key);
   });
   const dias = uniqueDays.size;
-  const tma = fCons.length
-    ? Math.round(fCons.reduce((a, c) => a + c.tma, 0) / fCons.length)
+  const tma = baseCons.length
+    ? Math.round(
+        baseCons.reduce((a, c) => a + (Number(c.tma) || 0), 0) /
+          baseCons.length,
+      )
     : 0;
-  const tme = fCons.length
-    ? Math.round(fCons.reduce((a, c) => a + c.tme, 0) / fCons.length)
+  const tme = baseCons.length
+    ? Math.round(
+        baseCons.reduce((a, c) => a + (Number(c.tme) || 0), 0) /
+          baseCons.length,
+      )
     : 0;
 
   return {
