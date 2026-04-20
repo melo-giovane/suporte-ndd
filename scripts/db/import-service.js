@@ -118,8 +118,8 @@ export function importDashboardToSqlite({
     LIMIT 1
   `);
 
-  const existsTicket = db.prepare(`
-    SELECT 1
+  const readTicketState = db.prepare(`
+    SELECT status, data_fechamento
     FROM ellevo_tickets
     WHERE chamado = ?
     LIMIT 1
@@ -145,7 +145,24 @@ export function importDashboardToSqlite({
       : payload.atendRows;
 
     const ticketRows = onlyNew
-      ? payload.ticketRows.filter((row) => !existsTicket.get(row.chamado))
+      ? payload.ticketRows.filter((row) => {
+          const current = readTicketState.get(row.chamado);
+
+          if (!current) {
+            return true;
+          }
+
+          const incomingClosed =
+            row.status === "Fechado" || Boolean(row.dataFechamento);
+          const currentClosed =
+            current.status === "Fechado" && Boolean(current.data_fechamento);
+          const hasDifferentCloseDate =
+            Boolean(row.dataFechamento) &&
+            row.dataFechamento !== current.data_fechamento;
+
+          // Incremental mode keeps existing rows, but must reconcile ticket closure updates.
+          return (incomingClosed && !currentClosed) || hasDifferentCloseDate;
+        })
       : payload.ticketRows;
 
     consRows.forEach((row) => {

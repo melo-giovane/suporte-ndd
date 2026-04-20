@@ -38,6 +38,8 @@ export default function ResumoTab({
   seriesVis,
   setSeriesVis,
   onTicketDrilldown,
+  isAttendantOwnScope = false,
+  ticketGoalPct = 20,
 }) {
   const [dailyCallsAgentSel, setDailyCallsAgentSel] = useState("__ALL__");
   const [dailyTicketMetricSel, setDailyTicketMetricSel] =
@@ -198,12 +200,6 @@ export default function ResumoTab({
 
   const METRICS = [
     {
-      key: "Total",
-      label: "Total Chamadas",
-      color: P.accent,
-      pct: false,
-    },
-    {
       key: "Atendidas",
       label: "Atendidas",
       color: P.green,
@@ -233,6 +229,12 @@ export default function ResumoTab({
     TICKET_METRICS.find((x) => x.key === dailyTicketMetricSel) ||
     TICKET_METRICS[0];
 
+  const ticketGoalRatio = Number(ticketGoalPct) / 100;
+  const ticketRegistrationRatio = Number(kpis.txRegistros) || 0;
+  const isTicketGoalReached =
+    Number.isFinite(ticketGoalRatio) &&
+    ticketRegistrationRatio >= ticketGoalRatio;
+
   return (
     <>
       <Section title="Telefonia" icon="📞">
@@ -244,18 +246,45 @@ export default function ResumoTab({
             sub={`${kpis.tc} total`}
             color={P.green}
           />
-          <KPI
-            icon="⚠️"
-            label="Tx Aband+Não At."
-            value={fmtPct(kpis.txAband)}
-            color={P.orange}
-          />
-          <KPI
-            icon="⚠️"
-            label="Aband+Não At."
-            value={kpis.tab}
-            color={P.orange}
-          />
+          {isAttendantOwnScope ? (
+            <>
+              <KPI
+                icon="🧾"
+                label="Registros / Ligações"
+                value={fmtPct(ticketRegistrationRatio)}
+                sub={`${kpis.tkt} tickets de ${kpis.tc} ligações`}
+                color={P.purple}
+              />
+              <KPI
+                icon="🎯"
+                label="Objetivo de Registros"
+                value={fmtPct(
+                  Number.isFinite(ticketGoalRatio) ? ticketGoalRatio : 0,
+                )}
+                sub={
+                  isTicketGoalReached
+                    ? "Objetivo atingido"
+                    : `Atual ${fmtPct(ticketRegistrationRatio)}`
+                }
+                color={isTicketGoalReached ? P.green : P.orange}
+              />
+            </>
+          ) : (
+            <>
+              <KPI
+                icon="⚠️"
+                label="Tx Aband+Não At."
+                value={fmtPct(kpis.txAband)}
+                color={P.orange}
+              />
+              <KPI
+                icon="⚠️"
+                label="Aband+Não At."
+                value={kpis.tab}
+                color={P.orange}
+              />
+            </>
+          )}
           <KPI
             icon="⏱"
             label="TMA Médio"

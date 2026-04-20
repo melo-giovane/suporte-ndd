@@ -25,6 +25,8 @@ const MASTER_AUTO_SYNC_FILE = path.resolve(
 const MASTER_AUTO_SYNC_ENABLED =
   String(process.env.MASTER_AUTO_SYNC_ENABLED || "true").toLowerCase() !==
   "false";
+const DEFAULT_TICKET_GOAL_PCT = 20;
+const TICKET_GOAL_SETTING_KEY = "ticket_goal_pct";
 
 app.use(express.json());
 
@@ -173,6 +175,41 @@ function computeTeamTotals(db) {
     tktErros: ticketTotals?.tktErros || 0,
     dias: callTotals?.dias || 0,
   };
+}
+
+function normalizeTicketGoalPct(rawValue) {
+  const parsed = Number.parseFloat(String(rawValue ?? "").replace(",", "."));
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < 0 || parsed > 100) return null;
+  return Math.round(parsed * 100) / 100;
+}
+
+function readTicketGoalPct(db) {
+  const row = db
+    .prepare(
+      `
+        SELECT value
+        FROM app_settings
+        WHERE key = ?
+        LIMIT 1
+      `,
+    )
+    .get(TICKET_GOAL_SETTING_KEY);
+
+  const parsed = normalizeTicketGoalPct(row?.value);
+  return parsed ?? DEFAULT_TICKET_GOAL_PCT;
+}
+
+function saveTicketGoalPct(db, value) {
+  db.prepare(
+    `
+      INSERT INTO app_settings (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = datetime('now')
+    `,
+  ).run(TICKET_GOAL_SETTING_KEY, String(value));
 }
 
 function requireAuth(req, res, next) {
@@ -342,12 +379,22 @@ function readDashboardDataForAttendant(db, user, scope) {
       .prepare(
         `
         SELECT
+          chamado,
           data_abertura AS dataAbertura,
+          data_fechamento AS dataFechamento,
           status,
+          titulo,
+          categoria_raw AS categoriaRaw,
           natureza,
+          responsavel,
           qualificacao,
           severidade,
-          categoria_normalizada AS categoria
+          categoria_normalizada AS categoria,
+          cliente,
+          modulo,
+          tramites,
+          descricao,
+          tempo_chamado_raw AS tempoChamadoRaw
         FROM ellevo_tickets
         ORDER BY data_abertura
       `,
@@ -444,7 +491,7 @@ function readDashboardDataForAttendant(db, user, scope) {
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") {
@@ -755,7 +802,41 @@ app.post("/api/users", requireAuth, requireMaster, (req, res) => {
   }
 });
 
+app.put("/api/settings/ticket-goal", requireAuth, requireMaster, (req, res) => {
+  const ticketGoalPct = normalizeTicketGoalPct(req.body?.ticketGoalPct);
+
+  if (ticketGoalPct === null) {
+    return res.status(400).json({
+      ok: false,
+      error: "Informe uma meta válida entre 0 e 100%.",
+    });
+  }
+
+  let db;
+  try {
+    db = openDatabase();
+    ensureSchema(db);
+    saveTicketGoalPct(db, ticketGoalPct);
+
+    return res.json({
+      ok: true,
+      settings: {
+        ticketGoalPct,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+    });
+  } finally {
+    if (db) db.close();
+  }
+});
+
 app.get("/api/dashboard-data", requireAuth, (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+
   const scopeRaw = String(req.query?.scope || "own").toLowerCase();
   const requestedScope = scopeRaw === "team" ? "team" : "own";
 
@@ -784,6 +865,7 @@ app.get("/api/dashboard-data", requireAuth, (req, res) => {
       .get();
 
     const teamTotals = computeTeamTotals(db);
+    const ticketGoalPct = readTicketGoalPct(db);
 
     return res.json({
       ok: true,
@@ -791,6 +873,7 @@ app.get("/api/dashboard-data", requireAuth, (req, res) => {
         ...payload,
         latestImport: latestImport?.importedAt || null,
         teamTotals,
+        ticketGoalPct,
         viewScope: effectiveScope,
         role: req.authUser.role,
       },

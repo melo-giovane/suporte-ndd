@@ -422,6 +422,11 @@ export default function App() {
     state: "idle",
     message: "",
   });
+  const [ticketGoalInput, setTicketGoalInput] = useState("20");
+  const [ticketGoalStatus, setTicketGoalStatus] = useState({
+    state: "idle",
+    message: "",
+  });
   const [userForm, setUserForm] = useState({
     username: "",
     password: "",
@@ -480,6 +485,7 @@ export default function App() {
     isRestoring,
     incrementalStatus,
     reprocessStatus,
+    ticketGoalPct,
     incrementalFileRef,
     reprocessFileRef,
     fCons,
@@ -662,6 +668,69 @@ export default function App() {
     [authToken, fetchUsers, userForm],
   );
 
+  const handleSaveTicketGoal = useCallback(
+    async (e) => {
+      e.preventDefault();
+
+      const parsed = Number.parseFloat(
+        String(ticketGoalInput || "").replace(",", "."),
+      );
+
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+        setTicketGoalStatus({
+          state: "error",
+          message: "Informe uma meta válida entre 0 e 100%.",
+        });
+        return;
+      }
+
+      setTicketGoalStatus({
+        state: "saving",
+        message: "Salvando meta...",
+      });
+
+      try {
+        const resp = await fetch(apiUrl("/api/settings/ticket-goal"), {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ ticketGoalPct: parsed }),
+        });
+
+        const body = await resp.json();
+        if (!resp.ok || !body?.ok) {
+          throw new Error(body?.error || "Não foi possível salvar a meta.");
+        }
+
+        const nextGoal = Number(body?.settings?.ticketGoalPct);
+        if (Number.isFinite(nextGoal)) {
+          setTicketGoalInput(String(nextGoal));
+        }
+
+        setTicketGoalStatus({
+          state: "success",
+          message: "Meta atualizada com sucesso.",
+        });
+        await retryLoadFromDatabase();
+      } catch (error) {
+        setTicketGoalStatus({
+          state: "error",
+          message:
+            error instanceof Error ? error.message : "Falha ao salvar a meta.",
+        });
+      }
+    },
+    [authToken, retryLoadFromDatabase, ticketGoalInput],
+  );
+
+  useEffect(() => {
+    if (Number.isFinite(Number(ticketGoalPct))) {
+      setTicketGoalInput(String(ticketGoalPct));
+    }
+  }, [ticketGoalPct]);
+
   useEffect(() => {
     if (isMaster) {
       fetchUsers();
@@ -697,7 +766,7 @@ export default function App() {
   }, [fTickets, ticketListFilterSel]);
 
   const visibleTicketsList = useMemo(() => {
-    if (!isAttendant) return filteredTicketsList;
+    if (!isAttendant || isAttendantTeamTicketsScope) return filteredTicketsList;
 
     const responsibleName = (authUser?.attendantResponsavel || "")
       .trim()
@@ -710,7 +779,12 @@ export default function App() {
     return filteredTicketsList.filter(
       (t) => (t.responsavel || "").trim().toLowerCase() === responsibleName,
     );
-  }, [authUser?.attendantResponsavel, filteredTicketsList, isAttendant]);
+  }, [
+    authUser?.attendantResponsavel,
+    filteredTicketsList,
+    isAttendant,
+    isAttendantTeamTicketsScope,
+  ]);
 
   const hourlyActivity = useMemo(() => {
     const buckets = new Map();
@@ -942,6 +1016,11 @@ export default function App() {
       setSelectedTicket(null);
     }
   }, [isAttendantTeamTicketsScope]);
+
+  useEffect(() => {
+    if (!isAttendant || !authToken) return;
+    retryLoadFromDatabase();
+  }, [attendantScope, authToken, isAttendant, retryLoadFromDatabase]);
 
   if (!authToken || !authUser) {
     return (
@@ -1506,6 +1585,8 @@ export default function App() {
               seriesVis={seriesVis}
               setSeriesVis={setSeriesVis}
               onTicketDrilldown={handleTicketDrilldown}
+              isAttendantOwnScope={isAttendant && attendantScope === "own"}
+              ticketGoalPct={ticketGoalPct}
             />
           </Suspense>
         )}
@@ -1920,40 +2001,42 @@ export default function App() {
               <>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                   <ChartCard title="Ligações por Hora" h={260}>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 6,
-                        marginBottom: 10,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      {[
-                        { id: "volume", label: "Volume" },
-                        { id: "media", label: "Média/Hora" },
-                      ].map((option) => {
-                        const isActive = hourlyVolumeMode === option.id;
-                        return (
-                          <button
-                            key={option.id}
-                            onClick={() => setHourlyVolumeMode(option.id)}
-                            style={{
-                              border: `1px solid ${isActive ? P.accent : P.bdr}`,
-                              background: isActive ? `${P.accent}22` : P.card,
-                              color: isActive ? P.text : P.dim,
-                              borderRadius: 999,
-                              padding: "4px 10px",
-                              fontSize: 10,
-                              fontWeight: 700,
-                              letterSpacing: 0.4,
-                              cursor: "pointer",
-                            }}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {!isAttendant && (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          marginBottom: 10,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        {[
+                          { id: "volume", label: "Volume" },
+                          { id: "media", label: "Média/Hora" },
+                        ].map((option) => {
+                          const isActive = hourlyVolumeMode === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              onClick={() => setHourlyVolumeMode(option.id)}
+                              style={{
+                                border: `1px solid ${isActive ? P.accent : P.bdr}`,
+                                background: isActive ? `${P.accent}22` : P.card,
+                                color: isActive ? P.text : P.dim,
+                                borderRadius: 999,
+                                padding: "4px 10px",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: 0.4,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <ResponsiveContainer>
                       <BarChart data={hourlyActivity} barGap={3}>
                         <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
@@ -1963,7 +2046,14 @@ export default function App() {
                         />
                         <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                         <Tooltip content={<TT />} />
-                        {hourlyVolumeMode === "volume" ? (
+                        {isAttendant ? (
+                          <Bar
+                            dataKey="total"
+                            name="Ligações"
+                            fill={P.accent}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        ) : hourlyVolumeMode === "volume" ? (
                           <>
                             <Bar
                               dataKey="total"
@@ -1999,57 +2089,73 @@ export default function App() {
                     </ResponsiveContainer>
                   </ChartCard>
 
-                  <ChartCard
-                    title="Taxa de abandono/Não atendidas por hora"
-                    h={260}
-                  >
-                    <ResponsiveContainer>
-                      <LineChart data={hourlyActivity}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                        <XAxis
-                          dataKey="horaLabel"
-                          tick={{ fill: P.dim, fontSize: 10 }}
-                        />
-                        <YAxis
-                          tick={{ fill: P.dim, fontSize: 10 }}
-                          domain={[0, 1]}
-                          tickFormatter={(v) => fmtPct(v)}
-                        />
-                        <Tooltip content={<TT />} />
-                        <Line
-                          type="monotone"
-                          dataKey="txAbandono"
-                          name="Tx Ab./NA"
-                          stroke={P.red}
-                          strokeWidth={2}
-                          dot={{ r: 2 }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </ChartCard>
+                  {!isAttendant && (
+                    <ChartCard
+                      title="Taxa de abandono/Não atendidas por hora"
+                      h={260}
+                    >
+                      <ResponsiveContainer>
+                        <LineChart data={hourlyActivity}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
+                          <XAxis
+                            dataKey="horaLabel"
+                            tick={{ fill: P.dim, fontSize: 10 }}
+                          />
+                          <YAxis
+                            tick={{ fill: P.dim, fontSize: 10 }}
+                            domain={[0, 1]}
+                            tickFormatter={(v) => fmtPct(v)}
+                          />
+                          <Tooltip content={<TT />} />
+                          <Line
+                            type="monotone"
+                            dataKey="txAbandono"
+                            name="Tx Ab./NA"
+                            stroke={P.red}
+                            strokeWidth={2}
+                            dot={{ r: 2 }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartCard>
+                  )}
                 </div>
 
                 <Section title="Detalhamento por Hora" icon="📋">
                   <Table
-                    headers={[
-                      "Hora",
-                      "Total",
-                      "Atend.",
-                      "Não At.",
-                      "Aband.",
-                      "Tx Atend.",
-                      "Tx Ab./NA",
-                    ]}
-                    rows={hourlyActivity.map((h) => [
-                      h.horaLabel,
-                      h.total,
-                      h.atendidas,
-                      h.naoAtendidas,
-                      h.abandonadas,
-                      fmtPct(h.txAtend),
-                      fmtPct(h.txAbandono),
-                    ])}
+                    headers={
+                      isAttendant
+                        ? ["Hora", "Total", "Atend.", "Não At.", "Aband."]
+                        : [
+                            "Hora",
+                            "Total",
+                            "Atend.",
+                            "Não At.",
+                            "Aband.",
+                            "Tx Atend.",
+                            "Tx Ab./NA",
+                          ]
+                    }
+                    rows={hourlyActivity.map((h) =>
+                      isAttendant
+                        ? [
+                            h.horaLabel,
+                            h.total,
+                            h.atendidas,
+                            h.naoAtendidas,
+                            h.abandonadas,
+                          ]
+                        : [
+                            h.horaLabel,
+                            h.total,
+                            h.atendidas,
+                            h.naoAtendidas,
+                            h.abandonadas,
+                            fmtPct(h.txAtend),
+                            fmtPct(h.txAbandono),
+                          ],
+                    )}
                   />
                 </Section>
               </>
@@ -2174,117 +2280,97 @@ export default function App() {
                 />
               </div>
             </Section>
-            {isAttendantTeamTicketsScope ? (
-              <Section title="Visão Consolidada da Equipe" icon="👥">
+            <div ref={ticketListSectionRef}>
+              <Section
+                title={`Lista de Tickets · ${ticketFilterLabel}`}
+                icon="🧾"
+              >
                 <div
                   style={{
-                    padding: 14,
-                    borderRadius: 12,
-                    border: `1px solid ${P.bdr}`,
-                    background: P.card,
-                    color: P.dim,
-                    fontSize: 12,
-                    lineHeight: 1.5,
+                    display: "flex",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    marginBottom: 10,
                   }}
                 >
-                  No modo "Totais da Equipe", o perfil atendente visualiza
-                  apenas indicadores consolidados de tickets. A listagem e os
-                  detalhes individuais permanecem restritos ao modo "Meus".
-                </div>
-              </Section>
-            ) : (
-              <div ref={ticketListSectionRef}>
-                <Section
-                  title={`Lista de Tickets · ${ticketFilterLabel}`}
-                  icon="🧾"
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 6,
-                      flexWrap: "wrap",
-                      marginBottom: 10,
-                    }}
-                  >
-                    {[
-                      { key: "todos", label: "Todos" },
-                      { key: "abertos", label: "Abertos" },
-                      { key: "fechados", label: "Fechados" },
-                      { key: "erros", label: "Erros/App" },
-                      { key: "transferencias", label: "Transferências" },
-                      { key: "outros", label: "Outros" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.key}
-                        onClick={() => {
-                          setTicketListFilterSel(opt.key);
-                          setSelectedTicket(null);
-                        }}
-                        style={{
-                          padding: "4px 10px",
-                          border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
-                          borderRadius: 18,
-                          background:
-                            ticketListFilterSel === opt.key
-                              ? `${P.accent}22`
-                              : "transparent",
-                          color:
-                            ticketListFilterSel === opt.key ? P.accent : P.dim,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  {visibleTicketsList.length === 0 ? (
-                    <div
+                  {[
+                    { key: "todos", label: "Todos" },
+                    { key: "abertos", label: "Abertos" },
+                    { key: "fechados", label: "Fechados" },
+                    { key: "erros", label: "Erros/App" },
+                    { key: "transferencias", label: "Transferências" },
+                    { key: "outros", label: "Outros" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        setTicketListFilterSel(opt.key);
+                        setSelectedTicket(null);
+                      }}
                       style={{
-                        padding: 18,
-                        textAlign: "center",
-                        color: P.green,
-                        background: P.card,
-                        borderRadius: 12,
-                        border: `1px solid ${P.bdr}`,
+                        padding: "4px 10px",
+                        border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
+                        borderRadius: 18,
+                        background:
+                          ticketListFilterSel === opt.key
+                            ? `${P.accent}22`
+                            : "transparent",
+                        color:
+                          ticketListFilterSel === opt.key ? P.accent : P.dim,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        cursor: "pointer",
                       }}
                     >
-                      Nenhum ticket para o filtro selecionado.
-                    </div>
-                  ) : (
-                    <Table
-                      headers={[
-                        "Chamado",
-                        "Título",
-                        "Status",
-                        "Responsável",
-                        "Severidade",
-                        "Categoria",
-                      ]}
-                      rows={visibleTicketsList.map((t) => [
-                        t.chamado || "-",
-                        (t.titulo || "-").slice(0, 45),
-                        t.status || "-",
-                        (t.responsavel || "-").split(" ").slice(0, 2).join(" "),
-                        t.severidade || "-",
-                        t.categoria || "-",
-                      ])}
-                      onRowClick={(idx) =>
-                        setSelectedTicket(visibleTicketsList[idx])
-                      }
-                      selectedRowIndex={
-                        selectedTicket
-                          ? visibleTicketsList.findIndex(
-                              (t) => t.chamado === selectedTicket.chamado,
-                            )
-                          : -1
-                      }
-                    />
-                  )}
-                </Section>
-              </div>
-            )}
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {visibleTicketsList.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 18,
+                      textAlign: "center",
+                      color: P.green,
+                      background: P.card,
+                      borderRadius: 12,
+                      border: `1px solid ${P.bdr}`,
+                    }}
+                  >
+                    Nenhum ticket para o filtro selecionado.
+                  </div>
+                ) : (
+                  <Table
+                    headers={[
+                      "Chamado",
+                      "Título",
+                      "Status",
+                      "Responsável",
+                      "Severidade",
+                      "Categoria",
+                    ]}
+                    rows={visibleTicketsList.map((t) => [
+                      t.chamado || "-",
+                      (t.titulo || "-").slice(0, 45),
+                      t.status || "-",
+                      (t.responsavel || "-").split(" ").slice(0, 2).join(" "),
+                      t.severidade || "-",
+                      t.categoria || "-",
+                    ])}
+                    onRowClick={(idx) =>
+                      setSelectedTicket(visibleTicketsList[idx])
+                    }
+                    selectedRowIndex={
+                      selectedTicket
+                        ? visibleTicketsList.findIndex(
+                            (t) => t.chamado === selectedTicket.chamado,
+                          )
+                        : -1
+                    }
+                  />
+                )}
+              </Section>
+            </div>
           </>
         )}
 
@@ -2564,7 +2650,8 @@ export default function App() {
                 >
                   Envie novamente o mesmo arquivo consolidado para atualizar o
                   banco sem duplicar dados. Neste modo, apenas linhas novas sao
-                  aproveitadas e as ja existentes sao ignoradas.
+                  aproveitadas. Tickets ja existentes em aberto podem ser
+                  atualizados quando chegarem como fechados.
                 </p>
 
                 <div
@@ -2847,6 +2934,105 @@ export default function App() {
                       }}
                     >
                       {userMgmtStatus.message}
+                    </div>
+                  )}
+                </form>
+
+                <form
+                  onSubmit={handleSaveTicketGoal}
+                  style={{
+                    background: P.card,
+                    borderRadius: 14,
+                    border: `1px solid ${P.bdr}`,
+                    padding: 14,
+                    flex: "1 1 260px",
+                    minWidth: 260,
+                    maxWidth: 320,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: P.dim,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Meta de registros
+                  </div>
+
+                  <div style={{ fontSize: 12, color: P.dim, marginBottom: 8 }}>
+                    Define o objetivo de % de tickets sobre o total de ligações
+                    na visão individual do atendente.
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <label
+                      style={{
+                        fontSize: 11,
+                        color: P.dim,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Objetivo (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={ticketGoalInput}
+                      onChange={(e) => {
+                        setTicketGoalInput(e.target.value);
+                        if (ticketGoalStatus.state !== "idle") {
+                          setTicketGoalStatus({ state: "idle", message: "" });
+                        }
+                      }}
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                      required
+                    />
+
+                    <button
+                      type="submit"
+                      style={{
+                        marginTop: 4,
+                        background: P.accent,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "9px 10px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Salvar meta
+                    </button>
+                  </div>
+
+                  {ticketGoalStatus.state !== "idle" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 12,
+                        color:
+                          ticketGoalStatus.state === "success"
+                            ? P.green
+                            : ticketGoalStatus.state === "error"
+                              ? P.red
+                              : P.dim,
+                      }}
+                    >
+                      {ticketGoalStatus.message}
                     </div>
                   )}
                 </form>

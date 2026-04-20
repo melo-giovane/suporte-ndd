@@ -52,7 +52,7 @@ export function useDashboardController({
     transf: true,
     erros: true,
   });
-  const [metricSel, setMetricSel] = useState("Total");
+  const [metricSel, setMetricSel] = useState("Atendidas");
   const [saveStatus, setSaveStatus] = useState({
     state: "idle",
     message: "",
@@ -67,6 +67,7 @@ export function useDashboardController({
     message: "",
   });
   const [teamTotals, setTeamTotals] = useState(null);
+  const [ticketGoalPct, setTicketGoalPct] = useState(20);
   const restoreRequestIdRef = useRef(0);
   const incrementalFileRef = useRef();
   const reprocessFileRef = useRef();
@@ -150,6 +151,10 @@ export function useDashboardController({
         setAtend(nextAtend);
         setTickets(nextTickets);
         setTeamTotals(data.teamTotals || null);
+        const nextTicketGoalPct = Number(data.ticketGoalPct);
+        if (Number.isFinite(nextTicketGoalPct)) {
+          setTicketGoalPct(nextTicketGoalPct);
+        }
         setSaveStatus({ state: "idle", message: "" });
         setLoaded(true);
         return true;
@@ -255,7 +260,7 @@ export function useDashboardController({
         statusSetter({
           state: "success",
           message: onlyNew
-            ? `Atualizacao incremental concluida. Novas linhas: Cons ${r?.consRows ?? 0}, Atend ${r?.atendRows ?? 0}, Tickets ${r?.ticketRows ?? 0}. Ignoradas (ja existentes): Cons ${r?.skippedConsRows ?? 0}, Atend ${r?.skippedAtendRows ?? 0}, Tickets ${r?.skippedTicketRows ?? 0}.`
+            ? `Atualizacao incremental concluida. Novas linhas: Cons ${r?.consRows ?? 0}, Atend ${r?.atendRows ?? 0}, Tickets ${r?.ticketRows ?? 0}. Ignoradas (ja existentes): Cons ${r?.skippedConsRows ?? 0}, Atend ${r?.skippedAtendRows ?? 0}, Tickets ${r?.skippedTicketRows ?? 0}. Tickets em aberto que vieram fechados tambem sao atualizados.`
             : `Dados salvos no SQLite. Cons: ${r?.consRows ?? 0}, Atend: ${r?.atendRows ?? 0}, Tickets: ${r?.ticketRows ?? 0}`,
         });
       } catch (error) {
@@ -365,6 +370,7 @@ export function useDashboardController({
     incrementalStatus,
     reprocessStatus,
     teamTotals,
+    ticketGoalPct,
     incrementalFileRef,
     reprocessFileRef,
     fCons,

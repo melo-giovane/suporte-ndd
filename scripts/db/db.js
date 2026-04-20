@@ -41,6 +41,8 @@ const DEFAULT_ATTENDANTS = [
   },
 ];
 
+const DEFAULT_TICKET_GOAL_PCT = 20;
+
 export function openDatabase(dbPath = DEFAULT_DB_PATH) {
   const resolved = path.resolve(dbPath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
@@ -166,6 +168,12 @@ export function ensureSchema(db) {
 
     CREATE INDEX IF NOT EXISTS idx_users_role
       ON users (role);
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Lightweight migration for legacy databases where ticket detail columns
@@ -232,6 +240,14 @@ export function ensureSchema(db) {
       "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
     );
   }
+
+  db.prepare(
+    `
+      INSERT INTO app_settings (key, value)
+      VALUES ('ticket_goal_pct', ?)
+      ON CONFLICT(key) DO NOTHING
+    `,
+  ).run(String(DEFAULT_TICKET_GOAL_PCT));
 
   const upsertAttendant = db.prepare(`
     INSERT INTO attendants (name, atplus_alias, tickets_alias)
