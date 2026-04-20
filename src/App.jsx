@@ -16,6 +16,10 @@ import {
 } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
+  filterByDateRange,
+  pickConsRowsForKpisByDay,
+} from "./models/dashboardModel.js";
+import {
   BarChart,
   Bar,
   XAxis,
@@ -120,6 +124,26 @@ const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
+}
+
+function parseApiDate(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const text = String(value).trim();
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const year = Number.parseInt(dateOnly[1], 10);
+    const month = Number.parseInt(dateOnly[2], 10);
+    const day = Number.parseInt(dateOnly[3], 10);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function KPI({ label, value, sub, color, icon }) {
@@ -454,12 +478,21 @@ export default function App() {
   const [hourlyVolumeMode, setHourlyVolumeMode] = useState("volume");
   const [telefoniaTrendAgentSel, setTelefoniaTrendAgentSel] =
     useState("__ALL__");
+  const [attendantTeamTrendData, setAttendantTeamTrendData] = useState({
+    cons: [],
+    tickets: [],
+  });
+  const [attendantOwnTrendConsData, setAttendantOwnTrendConsData] = useState(
+    [],
+  );
 
   const isMaster = authUser?.role === "master";
   const isAttendant = authUser?.role === "atendente";
   const isAttendantTeamTicketsScope = isAttendant && attendantScope === "team";
   const attendantNotLinked =
-    isAttendant && !isAttendantTeamTicketsScope && !authUser?.attendantResponsavel;
+    isAttendant &&
+    !isAttendantTeamTicketsScope &&
+    !authUser?.attendantResponsavel;
 
   const handleLogout = useCallback(async () => {
     if (authToken) {
@@ -759,6 +792,94 @@ export default function App() {
   }, [fetchUserLinkOptions, fetchUsers, isMaster]);
 
   useEffect(() => {
+    if (!isAttendant || !authToken) {
+      setAttendantTeamTrendData({ cons: [], tickets: [] });
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadAttendantTeamTrendData() {
+      try {
+        const resp = await fetch(apiUrl("/api/dashboard-data?scope=team"), {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+
+        if (!resp.ok) return;
+
+        const body = await resp.json();
+        const data = body?.data;
+        if (!data || cancelled) return;
+
+        const cons = (data.cons || []).map((row) => ({
+          ...row,
+          dateReal: parseApiDate(row.dateReal),
+        }));
+        const tickets = (data.tickets || []).map((row) => ({
+          ...row,
+          dateReal: parseApiDate(row.dataAbertura),
+        }));
+
+        if (!cancelled) {
+          setAttendantTeamTrendData({ cons, tickets });
+        }
+      } catch {
+        // Se a API falhar, mantemos o estado atual para evitar quebra da UI.
+      }
+    }
+
+    loadAttendantTeamTrendData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, isAttendant]);
+
+  useEffect(() => {
+    if (!isAttendant || !authToken) {
+      setAttendantOwnTrendConsData([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadAttendantOwnTrendConsData() {
+      try {
+        const resp = await fetch(apiUrl("/api/dashboard-data?scope=own"), {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
+
+        if (!resp.ok) return;
+
+        const body = await resp.json();
+        const data = body?.data;
+        if (!data || cancelled) return;
+
+        const cons = (data.cons || []).map((row) => ({
+          ...row,
+          dateReal: parseApiDate(row.dateReal),
+        }));
+
+        if (!cancelled) {
+          setAttendantOwnTrendConsData(cons);
+        }
+      } catch {
+        // Se a API falhar, mantemos o estado atual para evitar quebra da UI.
+      }
+    }
+
+    loadAttendantOwnTrendConsData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, isAttendant]);
+
+  useEffect(() => {
     if (isMaster && (tab === "equipe" || tab === "atualizacao")) {
       return;
     }
@@ -976,6 +1097,22 @@ export default function App() {
   }, [fCons]);
 
   const telefoniaTrendAgentOptions = useMemo(() => {
+    if (isAttendant) {
+      const selfLabel =
+        String(authUser?.attendantRamal || "")
+          .trim()
+          .replace(" - Central", "") ||
+        String(authUser?.attendantResponsavel || "").trim() ||
+        "Meus dados";
+
+      return [
+        {
+          value: "__SELF__",
+          label: selfLabel,
+        },
+      ];
+    }
+
     const availableCallsRamais = new Set(
       fAtend.map((row) => String(row.ramal || "").trim()).filter(Boolean),
     );
@@ -1002,17 +1139,100 @@ export default function App() {
         label: ramal.replace(" - Central", ""),
       }))
       .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
-  }, [fAtend, fTickets]);
+  }, [
+    authUser?.attendantRamal,
+    authUser?.attendantResponsavel,
+    fAtend,
+    fTickets,
+    isAttendant,
+  ]);
+
+  const attendantTeamTrendCons = useMemo(
+    () =>
+      filterByDateRange(
+        attendantTeamTrendData.cons,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [attendantTeamTrendData.cons, dateFrom, dateTo, dayTypeFilter],
+  );
+
+  const attendantTeamTrendTickets = useMemo(
+    () =>
+      filterByDateRange(
+        attendantTeamTrendData.tickets,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [attendantTeamTrendData.tickets, dateFrom, dateTo, dayTypeFilter],
+  );
+
+  const attendantOwnTrendCons = useMemo(
+    () =>
+      filterByDateRange(
+        attendantOwnTrendConsData,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [attendantOwnTrendConsData, dateFrom, dateTo, dayTypeFilter],
+  );
 
   const telefoniaDailyCallsVsTicketsChart = useMemo(() => {
     const merged = new Map();
 
+    const selectedIsSelf = isAttendant && telefoniaTrendAgentSel === "__SELF__";
+    const selectedIsTeamForAttendant =
+      isAttendant && telefoniaTrendAgentSel === "__ALL__";
     const selectedRamal =
-      telefoniaTrendAgentSel === "__ALL__" ? null : telefoniaTrendAgentSel;
-    const selectedResponsavel = selectedRamal ? AGENT_MAP[selectedRamal] : null;
+      telefoniaTrendAgentSel === "__ALL__" || selectedIsSelf
+        ? null
+        : telefoniaTrendAgentSel;
+    const selectedResponsavel = selectedIsSelf
+      ? String(authUser?.attendantResponsavel || "").trim() ||
+        (String(authUser?.attendantRamal || "").trim()
+          ? AGENT_MAP[String(authUser?.attendantRamal || "").trim()]
+          : null)
+      : selectedRamal
+        ? AGENT_MAP[selectedRamal]
+        : null;
     const selectedResponsavelNorm = String(selectedResponsavel || "")
       .trim()
       .toLowerCase();
+    const sourceTickets = selectedIsTeamForAttendant
+      ? attendantTeamTrendTickets
+      : fTickets;
+
+    const buildDailyAtendidasGroups = (consRows) => {
+      const byDay = new Map();
+      const baseConsRows = pickConsRowsForKpisByDay(consRows);
+
+      baseConsRows.forEach((row) => {
+        const { key, label } = resolveDayGroupFromConsEntry(row);
+        if (!byDay.has(key)) {
+          byDay.set(key, {
+            key,
+            label,
+            atendidas: 0,
+          });
+        }
+
+        const current = byDay.get(key);
+        current.atendidas += Number(row.atendidas) || 0;
+      });
+
+      return Array.from(byDay.values()).sort((a, b) =>
+        String(a.key).localeCompare(String(b.key), "pt-BR"),
+      );
+    };
+
+    const sourceDailyGroups = selectedIsTeamForAttendant
+      ? buildDailyAtendidasGroups(attendantTeamTrendCons)
+      : selectedIsSelf
+        ? buildDailyAtendidasGroups(attendantOwnTrendCons)
+        : telefoniaDailyGroups;
 
     const ensureDay = (key, label) => {
       if (!merged.has(key)) {
@@ -1028,7 +1248,7 @@ export default function App() {
     };
 
     if (!selectedRamal) {
-      telefoniaDailyGroups.forEach((day) => {
+      sourceDailyGroups.forEach((day) => {
         merged.set(day.key, {
           key: day.key,
           dia: day.label,
@@ -1048,7 +1268,7 @@ export default function App() {
       });
     }
 
-    fTickets.forEach((ticket) => {
+    sourceTickets.forEach((ticket) => {
       if (selectedResponsavelNorm) {
         const ticketResponsavelNorm = String(ticket.responsavel || "")
           .trim()
@@ -1068,7 +1288,18 @@ export default function App() {
     return Array.from(merged.values())
       .sort((a, b) => String(a.key).localeCompare(String(b.key), "pt-BR"))
       .map(({ key, ...row }) => row);
-  }, [fAtend, fTickets, telefoniaDailyGroups, telefoniaTrendAgentSel]);
+  }, [
+    authUser?.attendantRamal,
+    authUser?.attendantResponsavel,
+    attendantOwnTrendCons,
+    attendantTeamTrendCons,
+    attendantTeamTrendTickets,
+    fAtend,
+    fTickets,
+    isAttendant,
+    telefoniaDailyGroups,
+    telefoniaTrendAgentSel,
+  ]);
 
   useEffect(() => {
     if (telefoniaTrendAgentSel === "__ALL__") return;
@@ -1362,8 +1593,7 @@ export default function App() {
               Central de Relacionamentos NDD
             </h1>
             <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
-              {kpis.dias} dias filtrados · {totalDaysCount} dias total
-              ·{" "}
+              {kpis.dias} dias filtrados · {totalDaysCount} dias total ·{" "}
               {isAttendant && attendantScope === "team"
                 ? kpis.tkt
                 : tickets.length}{" "}
@@ -2220,9 +2450,9 @@ export default function App() {
                         <Tooltip content={<TT />} />
                         {isAttendant ? (
                           <Bar
-                            dataKey="total"
-                            name="Ligações"
-                            fill={P.accent}
+                            dataKey="atendidas"
+                            name="Ligações Atendidas"
+                            fill={P.green}
                             radius={[4, 4, 0, 0]}
                           />
                         ) : hourlyVolumeMode === "volume" ? (
@@ -2592,8 +2822,7 @@ export default function App() {
                 {(() => {
                   const ratio = Number(kpis.txRegistros) || 0;
                   const goal = Number(ticketGoalPct) / 100;
-                  const goalReached =
-                    Number.isFinite(goal) && ratio >= goal;
+                  const goalReached = Number.isFinite(goal) && ratio >= goal;
                   return (
                     <>
                       <KPI
