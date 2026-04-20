@@ -7,7 +7,7 @@ import {
   filterByDateRange,
 } from "../models/dashboardModel.js";
 
-const API_BASE = import.meta.env.DEV ? "http://localhost:8787" : "";
+const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;

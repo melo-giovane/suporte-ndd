@@ -109,7 +109,7 @@ let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
 let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
 const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
 
-const API_BASE = import.meta.env.DEV ? "http://localhost:8787" : "";
+const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;

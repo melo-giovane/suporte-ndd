@@ -13,6 +13,7 @@ import {
 
 const app = express();
 const PORT = Number.parseInt(process.env.API_PORT || "8787", 10);
+const HOST = process.env.API_HOST || "0.0.0.0";
 const uploadDir = path.resolve(PROJECT_ROOT, "data/input/uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 const sessions = new Map();
@@ -873,6 +874,7 @@ app.post(
   },
 );
 
-app.listen(PORT, () => {
-  console.log(`[api] listening on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  const displayHost = HOST === "0.0.0.0" ? "localhost" : HOST;
+  console.log(`[api] listening on http://${displayHost}:${PORT}`);
 });
