@@ -73,7 +73,7 @@ function parseAtplusDateHour(value, referenceYear) {
 
   const txt = String(value).trim().replace(/\xa0/g, " ");
   const csv = txt.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2})(?::\d{1,2})?)?$/,
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2})(?::\d{1,2})?(?::\d{1,2})?)?$/,
   );
 
   if (csv) {

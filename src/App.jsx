@@ -350,7 +350,7 @@ function resolveHourFromConsEntry(entry) {
   }
 
   const label = String(entry?.data || "").trim();
-  const match = label.match(/(?:\s|^)([01]?\d|2[0-3])(?::\d{2})?$/);
+  const match = label.match(/(?:\s|^)([01]?\d|2[0-3])(?::\d{2})?(?::\d{2})?$/);
   if (!match) return null;
 
   const parsed = Number.parseInt(match[1], 10);
@@ -861,6 +861,7 @@ export default function App() {
           ? (totals.naoAtendidas + totals.abandonadas) / totals.total
           : 0;
         const txAtend = totals.total ? totals.atendidas / totals.total : 0;
+        const hasExpandableDetails = rows.length > 1;
 
         return {
           key: group.key,
@@ -877,7 +878,7 @@ export default function App() {
             ? Math.round(totals.tmeSum / totals.rowsCount)
             : 0,
           txAtend,
-          hasHourlyDetails: hasHourlyRows,
+          hasHourlyDetails: hasExpandableDetails,
           rows,
         };
       });
