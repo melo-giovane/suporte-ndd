@@ -958,11 +958,11 @@ export default function App() {
       });
   }, [fCons]);
 
-  const telefoniaDailyAbandonmentChart = useMemo(
+  const telefoniaDailyAnsweredChart = useMemo(
     () =>
       telefoniaDailyGroups.map((day) => ({
         dia: day.label,
-        "Tx Ab./NA": day.txAbandono,
+        Atendidas: day.atendidas,
       })),
     [telefoniaDailyGroups],
   );
@@ -1642,28 +1642,27 @@ export default function App() {
                 marginTop: 14,
               }}
             >
-              <ChartCard title="Taxa de Abandono/Não Atendidas Diária" h={200}>
+              <ChartCard title="Total de Ligações Atendidas por Dia" h={200}>
                 <ResponsiveContainer>
-                  <LineChart data={telefoniaDailyAbandonmentChart}>
+                  <LineChart data={telefoniaDailyAnsweredChart}>
                     <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                     <XAxis
                       dataKey="dia"
                       tick={{ fill: P.dim, fontSize: 9 }}
                       interval={Math.max(
                         0,
-                        Math.floor(telefoniaDailyAbandonmentChart.length / 12),
+                        Math.floor(telefoniaDailyAnsweredChart.length / 12),
                       )}
                     />
                     <YAxis
                       tick={{ fill: P.dim, fontSize: 10 }}
-                      domain={[0, 1]}
-                      tickFormatter={(v) => fmtPct(v)}
+                      allowDecimals={false}
                     />
                     <Tooltip content={<TT />} />
                     <Line
                       type="monotone"
-                      dataKey="Tx Ab./NA"
-                      stroke={P.orange}
+                      dataKey="Atendidas"
+                      stroke={P.green}
                       strokeWidth={2}
                       dot={{ r: 2 }}
                     />
