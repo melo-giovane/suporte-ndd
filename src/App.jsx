@@ -2560,6 +2560,38 @@ export default function App() {
                 ])}
               />
             </Section>
+            <Section title="Registros" icon="🧾">
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {(() => {
+                  const ratio = Number(kpis.txRegistros) || 0;
+                  const goal = Number(ticketGoalPct) / 100;
+                  const goalReached =
+                    Number.isFinite(goal) && ratio >= goal;
+                  return (
+                    <>
+                      <KPI
+                        icon="🧾"
+                        label="Registros / Ligações Atendidas"
+                        value={fmtPct(ratio)}
+                        sub={`${kpis.tkt} tickets de ${kpis.ta} ligações atendidas`}
+                        color={P.purple}
+                      />
+                      <KPI
+                        icon="🎯"
+                        label="Objetivo de Registros"
+                        value={fmtPct(Number.isFinite(goal) ? goal : 0)}
+                        sub={
+                          goalReached
+                            ? "Objetivo atingido"
+                            : `Atual ${fmtPct(ratio)}`
+                        }
+                        color={goalReached ? P.green : P.orange}
+                      />
+                    </>
+                  );
+                })()}
+              </div>
+            </Section>
             <div
               style={{
                 display: "flex",

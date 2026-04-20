@@ -235,7 +235,7 @@ export default function ResumoTab({
   const isTicketGoalReached =
     Number.isFinite(ticketGoalRatio) &&
     ticketRegistrationRatio >= ticketGoalRatio;
-  const showRegistrationCards = isAttendantOwnScope || isMasterView;
+  const showRegistrationCards = isAttendantOwnScope;
   const showAbandonmentCards = !isAttendantOwnScope;
 
   return (
