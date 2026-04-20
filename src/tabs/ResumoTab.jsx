@@ -39,6 +39,7 @@ export default function ResumoTab({
   setSeriesVis,
   onTicketDrilldown,
   isAttendantOwnScope = false,
+  isMasterView = false,
   ticketGoalPct = 20,
 }) {
   const [dailyCallsAgentSel, setDailyCallsAgentSel] = useState("__ALL__");
@@ -234,6 +235,8 @@ export default function ResumoTab({
   const isTicketGoalReached =
     Number.isFinite(ticketGoalRatio) &&
     ticketRegistrationRatio >= ticketGoalRatio;
+  const showRegistrationCards = isAttendantOwnScope || isMasterView;
+  const showAbandonmentCards = !isAttendantOwnScope;
 
   return (
     <>
@@ -246,13 +249,13 @@ export default function ResumoTab({
             sub={`${kpis.tc} total`}
             color={P.green}
           />
-          {isAttendantOwnScope ? (
+          {showRegistrationCards && (
             <>
               <KPI
                 icon="🧾"
-                label="Registros / Ligações"
+                label="Registros / Ligações Atendidas"
                 value={fmtPct(ticketRegistrationRatio)}
-                sub={`${kpis.tkt} tickets de ${kpis.tc} ligações`}
+                sub={`${kpis.tkt} tickets de ${kpis.ta} ligações atendidas`}
                 color={P.purple}
               />
               <KPI
@@ -269,7 +272,8 @@ export default function ResumoTab({
                 color={isTicketGoalReached ? P.green : P.orange}
               />
             </>
-          ) : (
+          )}
+          {showAbandonmentCards && (
             <>
               <KPI
                 icon="⚠️"

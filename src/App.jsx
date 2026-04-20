@@ -7,7 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { fmtSec, fmtPct, isErroApp, isTransferencia } from "./utils.js";
+import {
+  AGENT_MAP,
+  fmtSec,
+  fmtPct,
+  isErroApp,
+  isTransferencia,
+} from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
   BarChart,
@@ -392,6 +398,13 @@ function resolveDayGroupFromConsEntry(entry) {
   };
 }
 
+function resolveDayGroupFromTicketEntry(entry) {
+  return resolveDayGroupFromConsEntry({
+    dateReal: entry?.dateReal || entry?.dataAbertura || null,
+    data: entry?.dataAbertura || "",
+  });
+}
+
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
@@ -438,6 +451,8 @@ export default function App() {
   });
   const [expandedTelefoniaDays, setExpandedTelefoniaDays] = useState({});
   const [hourlyVolumeMode, setHourlyVolumeMode] = useState("volume");
+  const [telefoniaTrendAgentSel, setTelefoniaTrendAgentSel] =
+    useState("__ALL__");
 
   const isMaster = authUser?.role === "master";
   const isAttendant = authUser?.role === "atendente";
@@ -958,14 +973,112 @@ export default function App() {
       });
   }, [fCons]);
 
-  const telefoniaDailyAnsweredChart = useMemo(
-    () =>
-      telefoniaDailyGroups.map((day) => ({
-        dia: day.label,
-        Atendidas: day.atendidas,
-      })),
-    [telefoniaDailyGroups],
-  );
+  const telefoniaTrendAgentOptions = useMemo(() => {
+    const availableCallsRamais = new Set(
+      fAtend.map((row) => String(row.ramal || "").trim()).filter(Boolean),
+    );
+    const availableTicketResponsaveis = new Set(
+      fTickets
+        .map((ticket) =>
+          String(ticket.responsavel || "")
+            .trim()
+            .toLowerCase(),
+        )
+        .filter(Boolean),
+    );
+
+    return Object.entries(AGENT_MAP)
+      .filter(([ramal, responsavel]) => {
+        const hasCalls = availableCallsRamais.has(ramal);
+        const hasTickets = availableTicketResponsaveis.has(
+          String(responsavel).trim().toLowerCase(),
+        );
+        return hasCalls || hasTickets;
+      })
+      .map(([ramal]) => ({
+        value: ramal,
+        label: ramal.replace(" - Central", ""),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [fAtend, fTickets]);
+
+  const telefoniaDailyCallsVsTicketsChart = useMemo(() => {
+    const merged = new Map();
+
+    const selectedRamal =
+      telefoniaTrendAgentSel === "__ALL__" ? null : telefoniaTrendAgentSel;
+    const selectedResponsavel = selectedRamal ? AGENT_MAP[selectedRamal] : null;
+    const selectedResponsavelNorm = String(selectedResponsavel || "")
+      .trim()
+      .toLowerCase();
+
+    const ensureDay = (key, label) => {
+      if (!merged.has(key)) {
+        merged.set(key, {
+          key,
+          dia: label,
+          Atendidas: 0,
+          Tickets: 0,
+        });
+      }
+
+      return merged.get(key);
+    };
+
+    if (!selectedRamal) {
+      telefoniaDailyGroups.forEach((day) => {
+        merged.set(day.key, {
+          key: day.key,
+          dia: day.label,
+          Atendidas: day.atendidas,
+          Tickets: 0,
+        });
+      });
+    } else {
+      fAtend.forEach((row) => {
+        if (String(row.ramal || "") !== selectedRamal) return;
+
+        const group = resolveDayGroupFromConsEntry(row);
+        if (!group?.key) return;
+
+        const current = ensureDay(group.key, group.label);
+        current.Atendidas += Number(row.atendidas) || 0;
+      });
+    }
+
+    fTickets.forEach((ticket) => {
+      if (selectedResponsavelNorm) {
+        const ticketResponsavelNorm = String(ticket.responsavel || "")
+          .trim()
+          .toLowerCase();
+
+        if (ticketResponsavelNorm !== selectedResponsavelNorm) return;
+      }
+
+      const group = resolveDayGroupFromTicketEntry(ticket);
+      if (!group?.key) return;
+
+      const current = ensureDay(group.key, group.label);
+      current.Tickets += 1;
+      merged.set(group.key, current);
+    });
+
+    return Array.from(merged.values())
+      .sort((a, b) => String(a.key).localeCompare(String(b.key), "pt-BR"))
+      .map(({ key, ...row }) => row);
+  }, [fAtend, fTickets, telefoniaDailyGroups, telefoniaTrendAgentSel]);
+
+  useEffect(() => {
+    if (telefoniaTrendAgentSel === "__ALL__") return;
+
+    const stillAvailable = telefoniaTrendAgentOptions.some(
+      (opt) => opt.value === telefoniaTrendAgentSel,
+    );
+
+    if (!stillAvailable) {
+      setTelefoniaTrendAgentSel("__ALL__");
+    }
+  }, [telefoniaTrendAgentOptions, telefoniaTrendAgentSel]);
 
   const toggleTelefoniaDay = useCallback((dayKey) => {
     setExpandedTelefoniaDays((prev) => ({
@@ -1586,6 +1699,7 @@ export default function App() {
               setSeriesVis={setSeriesVis}
               onTicketDrilldown={handleTicketDrilldown}
               isAttendantOwnScope={isAttendant && attendantScope === "own"}
+              isMasterView={isMaster}
               ticketGoalPct={ticketGoalPct}
             />
           </Suspense>
@@ -1642,16 +1756,50 @@ export default function App() {
                 marginTop: 14,
               }}
             >
-              <ChartCard title="Total de Ligações Atendidas por Dia" h={200}>
+              <ChartCard
+                title="Ligações Atendidas x Total de Tickets por Dia"
+                h={200}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <select
+                    value={telefoniaTrendAgentSel}
+                    onChange={(e) => setTelefoniaTrendAgentSel(e.target.value)}
+                    style={{
+                      background: P.cardH,
+                      border: `1px solid ${P.bdr}`,
+                      borderRadius: 8,
+                      color: P.text,
+                      padding: "6px 8px",
+                      fontSize: 11,
+                      minWidth: 180,
+                    }}
+                  >
+                    <option value="__ALL__">Equipe toda</option>
+                    {telefoniaTrendAgentOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <ResponsiveContainer>
-                  <LineChart data={telefoniaDailyAnsweredChart}>
+                  <LineChart data={telefoniaDailyCallsVsTicketsChart}>
                     <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                     <XAxis
                       dataKey="dia"
                       tick={{ fill: P.dim, fontSize: 9 }}
                       interval={Math.max(
                         0,
-                        Math.floor(telefoniaDailyAnsweredChart.length / 12),
+                        Math.floor(
+                          telefoniaDailyCallsVsTicketsChart.length / 12,
+                        ),
                       )}
                     />
                     <YAxis
@@ -1659,10 +1807,21 @@ export default function App() {
                       allowDecimals={false}
                     />
                     <Tooltip content={<TT />} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
                     <Line
                       type="monotone"
                       dataKey="Atendidas"
+                      name="Ligações Atendidas"
                       stroke={P.green}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="Tickets"
+                      name="Total de Tickets"
+                      stroke={P.pink}
+                      strokeDasharray="4 3"
                       strokeWidth={2}
                       dot={{ r: 2 }}
                     />
