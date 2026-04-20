@@ -314,6 +314,9 @@ export function useDashboardController({
 
   const kpis = useMemo(() => buildKpis(fCons, fTickets), [fCons, fTickets]);
 
+  const dateRangeInvalid =
+    dateFrom !== "" && dateTo !== "" && dateTo < dateFrom;
+
   const catData = useMemo(() => aggregateBy(fTickets, "categoria"), [fTickets]);
   const sevData = useMemo(
     () =>
@@ -377,6 +380,7 @@ export function useDashboardController({
     fAtend,
     fTickets,
     kpis,
+    dateRangeInvalid,
     catData,
     sevData,
     natData,

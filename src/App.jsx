@@ -111,8 +111,6 @@ const INITIAL_THEME_MODE =
     ? "light"
     : "dark";
 
-let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
-let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
 const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
 
 const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
@@ -407,6 +405,8 @@ function resolveDayGroupFromTicketEntry(entry) {
 
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
+  const P = themeMode === "light" ? LIGHT_THEME : DARK_THEME;
+  const PIE_C = themeMode === "light" ? PIE_C_LIGHT : PIE_C_DARK;
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [pendingTicketListScroll, setPendingTicketListScroll] = useState(false);
@@ -457,6 +457,8 @@ export default function App() {
   const isMaster = authUser?.role === "master";
   const isAttendant = authUser?.role === "atendente";
   const isAttendantTeamTicketsScope = isAttendant && attendantScope === "team";
+  const attendantNotLinked =
+    isAttendant && !isAttendantTeamTicketsScope && !authUser?.attendantResponsavel;
 
   const handleLogout = useCallback(async () => {
     if (authToken) {
@@ -507,6 +509,7 @@ export default function App() {
     fAtend,
     fTickets,
     kpis,
+    dateRangeInvalid,
     catData,
     sevData,
     natData,
@@ -529,8 +532,6 @@ export default function App() {
     canUpload: isMaster,
     onUnauthorized: handleLogout,
   });
-
-  const effectiveKpis = useMemo(() => kpis, [kpis]);
 
   const totalDaysCount = useMemo(() => {
     const uniqueDays = new Set();
@@ -1360,10 +1361,10 @@ export default function App() {
               Central de Relacionamentos NDD
             </h1>
             <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
-              {effectiveKpis.dias} dias filtrados · {totalDaysCount} dias total
+              {kpis.dias} dias filtrados · {totalDaysCount} dias total
               ·{" "}
               {isAttendant && attendantScope === "team"
-                ? effectiveKpis.tkt
+                ? kpis.tkt
                 : tickets.length}{" "}
               tickets
             </p>
@@ -1480,6 +1481,18 @@ export default function App() {
               <option value="holidays">Feriados</option>
               <option value="weekends">Finais de semana</option>
             </select>
+            {dateRangeInvalid && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: P.red,
+                  fontWeight: 600,
+                  alignSelf: "center",
+                }}
+              >
+                ⚠️ Período inválido
+              </span>
+            )}
             {(dateFrom || dateTo || dayTypeFilter !== "all") && (
               <button
                 onClick={() => {
@@ -1624,8 +1637,6 @@ export default function App() {
           >
             <button
               onClick={() => {
-                P = DARK_THEME;
-                PIE_C = PIE_C_DARK;
                 setThemeMode("dark");
               }}
               style={{
@@ -1641,8 +1652,6 @@ export default function App() {
             </button>
             <button
               onClick={() => {
-                P = LIGHT_THEME;
-                PIE_C = PIE_C_LIGHT;
                 setThemeMode("light");
               }}
               style={{
@@ -1685,7 +1694,7 @@ export default function App() {
               TT={TT}
               fmtSec={fmtSec}
               fmtPct={fmtPct}
-              kpis={effectiveKpis}
+              kpis={kpis}
               metricSel={metricSel}
               setMetricSel={setMetricSel}
               dailyChart={dailyChart}
@@ -2484,7 +2493,20 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                {visibleTicketsList.length === 0 ? (
+                {attendantNotLinked ? (
+                  <div
+                    style={{
+                      padding: 18,
+                      textAlign: "center",
+                      color: P.orange,
+                      background: P.card,
+                      borderRadius: 12,
+                      border: `1px solid ${P.orange}`,
+                    }}
+                  >
+                    ⚠️ Perfil sem atendente vinculado. Contate o administrador.
+                  </div>
+                ) : visibleTicketsList.length === 0 ? (
                   <div
                     style={{
                       padding: 18,
@@ -2845,26 +2867,39 @@ export default function App() {
                 </p>
 
                 <div
-                  onClick={() => incrementalFileRef.current?.click()}
+                  onClick={() =>
+                    incrementalStatus.state !== "saving" &&
+                    incrementalFileRef.current?.click()
+                  }
                   style={{
-                    border: `2px dashed ${P.bdr}`,
+                    border: `2px dashed ${incrementalStatus.state === "saving" ? P.accent : P.bdr}`,
                     borderRadius: 12,
                     padding: "26px 18px",
-                    cursor: "pointer",
+                    cursor:
+                      incrementalStatus.state === "saving"
+                        ? "not-allowed"
+                        : "pointer",
                     background: P.cardH,
                     textAlign: "center",
                     transition: "all .2s",
+                    opacity: incrementalStatus.state === "saving" ? 0.6 : 1,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = P.accent;
+                    if (incrementalStatus.state !== "saving")
+                      e.currentTarget.style.borderColor = P.accent;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = P.bdr;
+                    if (incrementalStatus.state !== "saving")
+                      e.currentTarget.style.borderColor = P.bdr;
                   }}
                 >
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>📥</div>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>
+                    {incrementalStatus.state === "saving" ? "⏳" : "📥"}
+                  </div>
                   <div style={{ color: P.text, fontWeight: 600, fontSize: 13 }}>
-                    Clique para adicionar novas linhas
+                    {incrementalStatus.state === "saving"
+                      ? "Processando..."
+                      : "Clique para adicionar novas linhas"}
                   </div>
                   <div style={{ color: P.dim, fontSize: 11, marginTop: 4 }}>
                     Formato aceito: .xlsx ou .xls
@@ -2920,28 +2955,41 @@ export default function App() {
                   </p>
 
                   <div
-                    onClick={() => reprocessFileRef.current?.click()}
+                    onClick={() =>
+                      reprocessStatus.state !== "saving" &&
+                      reprocessFileRef.current?.click()
+                    }
                     style={{
-                      border: `2px dashed ${P.bdr}`,
+                      border: `2px dashed ${reprocessStatus.state === "saving" ? P.orange : P.bdr}`,
                       borderRadius: 12,
                       padding: "22px 18px",
-                      cursor: "pointer",
+                      cursor:
+                        reprocessStatus.state === "saving"
+                          ? "not-allowed"
+                          : "pointer",
                       background: P.card,
                       textAlign: "center",
                       transition: "all .2s",
+                      opacity: reprocessStatus.state === "saving" ? 0.6 : 1,
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = P.orange;
+                      if (reprocessStatus.state !== "saving")
+                        e.currentTarget.style.borderColor = P.orange;
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = P.bdr;
+                      if (reprocessStatus.state !== "saving")
+                        e.currentTarget.style.borderColor = P.bdr;
                     }}
                   >
-                    <div style={{ fontSize: 24, marginBottom: 8 }}>♻️</div>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>
+                      {reprocessStatus.state === "saving" ? "⏳" : "♻️"}
+                    </div>
                     <div
                       style={{ color: P.text, fontWeight: 600, fontSize: 13 }}
                     >
-                      Reprocessar base completa
+                      {reprocessStatus.state === "saving"
+                        ? "Processando..."
+                        : "Reprocessar base completa"}
                     </div>
                     <div style={{ color: P.dim, fontSize: 11, marginTop: 4 }}>
                       Use o mesmo arquivo consolidado (.xlsx/.xls)

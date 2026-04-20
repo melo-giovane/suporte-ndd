@@ -17,14 +17,14 @@ const HOST = process.env.API_HOST || "0.0.0.0";
 const uploadDir = path.resolve(PROJECT_ROOT, "data/input/uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 const sessions = new Map();
-const DEFAULT_MASTER_AUTO_SYNC_FILE =
-  "C:\\Users\\geovane.melo\\OneDrive - NDD.Tech\\Documentos\\NDD Cargo\\Relat\u00F3rios\\Dashboard_Central.xlsx";
-const MASTER_AUTO_SYNC_FILE = path.resolve(
-  process.env.MASTER_AUTO_SYNC_FILE || DEFAULT_MASTER_AUTO_SYNC_FILE,
-);
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const MASTER_AUTO_SYNC_FILE = process.env.MASTER_AUTO_SYNC_FILE
+  ? path.resolve(process.env.MASTER_AUTO_SYNC_FILE)
+  : null;
 const MASTER_AUTO_SYNC_ENABLED =
+  MASTER_AUTO_SYNC_FILE !== null &&
   String(process.env.MASTER_AUTO_SYNC_ENABLED || "true").toLowerCase() !==
-  "false";
+    "false";
 const DEFAULT_TICKET_GOAL_PCT = 20;
 const TICKET_GOAL_SETTING_KEY = "ticket_goal_pct";
 
@@ -221,6 +221,11 @@ function requireAuth(req, res, next) {
   const session = sessions.get(token);
   if (!session?.userId) {
     return res.status(401).json({ ok: false, error: "Sessão inválida." });
+  }
+
+  if (Date.now() - new Date(session.createdAt).getTime() > SESSION_TTL_MS) {
+    sessions.delete(token);
+    return res.status(401).json({ ok: false, error: "Sessão expirada. Faça login novamente." });
   }
 
   let db;
