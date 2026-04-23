@@ -359,61 +359,53 @@ function readDashboardDataForAttendant(db, user, scope) {
   const ramal = user.attendantRamal || null;
   const responsavel = user.attendantResponsavel || null;
 
-  if (scope === "team") {
-    const cons = db
-      .prepare(
-        `
-        SELECT
-          data_label AS data,
-          total_chamadas AS total,
-          chamadas_atendidas AS atendidas,
-          chamadas_nao_atendidas AS naoAtendidas,
-          chamadas_abandonadas AS abandonadas,
-          tx_abandono_na AS txAbandono,
-          tma_seg AS tma,
-          tme_seg AS tme,
-          hora,
-          date_real AS dateReal
-        FROM atplus_cons_daily
-        ORDER BY date_real, hora, data_label
-      `,
-      )
-      .all();
+  const teamCons = db
+    .prepare(
+      `
+      SELECT
+        data_label AS data,
+        total_chamadas AS total,
+        chamadas_atendidas AS atendidas,
+        chamadas_nao_atendidas AS naoAtendidas,
+        chamadas_abandonadas AS abandonadas,
+        tx_abandono_na AS txAbandono,
+        tma_seg AS tma,
+        tme_seg AS tme,
+        hora,
+        date_real AS dateReal
+      FROM atplus_cons_daily
+      ORDER BY date_real, hora, data_label
+    `,
+    )
+    .all();
 
-    const tickets = db
-      .prepare(
-        `
-        SELECT
-          chamado,
-          data_abertura AS dataAbertura,
-          data_fechamento AS dataFechamento,
-          status,
-          titulo,
-          categoria_raw AS categoriaRaw,
-          natureza,
-          responsavel,
-          qualificacao,
-          severidade,
-          categoria_normalizada AS categoria,
-          cliente,
-          modulo,
-          tramites,
-          descricao,
-          tempo_chamado_raw AS tempoChamadoRaw
-        FROM ellevo_tickets
-        ORDER BY data_abertura
-      `,
-      )
-      .all();
+  const teamTickets = db
+    .prepare(
+      `
+      SELECT
+        chamado,
+        data_abertura AS dataAbertura,
+        data_fechamento AS dataFechamento,
+        status,
+        titulo,
+        categoria_raw AS categoriaRaw,
+        natureza,
+        responsavel,
+        qualificacao,
+        severidade,
+        categoria_normalizada AS categoria,
+        cliente,
+        modulo,
+        tramites,
+        descricao,
+        tempo_chamado_raw AS tempoChamadoRaw
+      FROM ellevo_tickets
+      ORDER BY data_abertura
+    `,
+    )
+    .all();
 
-    return {
-      cons,
-      atend: [],
-      tickets,
-    };
-  }
-
-  const cons = ramal
+  const ownCons = ramal
     ? db
         .prepare(
           `
@@ -440,7 +432,7 @@ function readDashboardDataForAttendant(db, user, scope) {
         .all(ramal)
     : [];
 
-  const atend = ramal
+  const ownAtend = ramal
     ? db
         .prepare(
           `
@@ -462,7 +454,7 @@ function readDashboardDataForAttendant(db, user, scope) {
         .all(ramal)
     : [];
 
-  const tickets = responsavel
+  const ownTickets = responsavel
     ? db
         .prepare(
           `
@@ -491,7 +483,24 @@ function readDashboardDataForAttendant(db, user, scope) {
         .all(responsavel)
     : [];
 
-  return { cons, atend, tickets };
+  if (scope === "team") {
+    return {
+      cons: teamCons,
+      atend: [],
+      tickets: teamTickets,
+      ownCons,
+      ownAtend,
+      ownTickets,
+    };
+  }
+
+  return {
+    cons: ownCons,
+    atend: ownAtend,
+    tickets: ownTickets,
+    teamCons,
+    teamTickets,
+  };
 }
 
 app.use((req, res, next) => {

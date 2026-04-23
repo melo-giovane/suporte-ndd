@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -40,13 +40,40 @@ export default function ResumoTab({
   setSeriesVis,
   onTicketDrilldown,
   isAttendantOwnScope = false,
+  isAttendant = false,
+  attendantDisplayName = "Eu",
+  fOwnCons = [],
+  fTeamCons = [],
+  fOwnAtend = [],
+  fOwnTickets = [],
+  fTeamTickets = [],
   isMasterView = false,
   ticketGoalPct = 20,
 }) {
-  const [dailyCallsAgentSel, setDailyCallsAgentSel] = useState("__ALL__");
+  const defaultCallsSel = isAttendant
+    ? isAttendantOwnScope
+      ? "__SELF__"
+      : "__ALL__"
+    : "__ALL__";
+  const [dailyCallsAgentSel, setDailyCallsAgentSel] = useState(defaultCallsSel);
   const [dailyTicketMetricSel, setDailyTicketMetricSel] =
     useState("transferencias");
-  const [dailyTicketAgentSel, setDailyTicketAgentSel] = useState("__ALL__");
+  const defaultTicketSel = isAttendant
+    ? isAttendantOwnScope
+      ? "__SELF__"
+      : "__ALL__"
+    : "__ALL__";
+  const [dailyTicketAgentSel, setDailyTicketAgentSel] =
+    useState(defaultTicketSel);
+
+  useEffect(() => {
+    setDailyCallsAgentSel(
+      isAttendant ? (isAttendantOwnScope ? "__SELF__" : "__ALL__") : "__ALL__",
+    );
+    setDailyTicketAgentSel(
+      isAttendant ? (isAttendantOwnScope ? "__SELF__" : "__ALL__") : "__ALL__",
+    );
+  }, [isAttendant, isAttendantOwnScope]);
 
   const callsAtendenteOptions = useMemo(
     () =>
@@ -57,22 +84,22 @@ export default function ResumoTab({
   );
 
   const dailyCallsEvolution = useMemo(() => {
-    if (dailyCallsAgentSel === "__ALL__") {
+    const buildFromConsList = (sourceList, fallback) => {
       const byDay = new Map();
-      const baseCons = pickConsRowsForKpisByDay(fCons);
+      const baseCons = pickConsRowsForKpisByDay(sourceList);
 
       baseCons.forEach((c) => {
         const d = c.dateReal;
         if (!d || Number.isNaN(d.getTime())) return;
 
         const y = d.getFullYear();
-        const m = `${d.getMonth() + 1}`.padStart(2, "0");
+        const mo = `${d.getMonth() + 1}`.padStart(2, "0");
         const day = `${d.getDate()}`.padStart(2, "0");
-        const key = `${y}-${m}-${day}`;
+        const key = `${y}-${mo}-${day}`;
 
         if (!byDay.has(key)) {
           byDay.set(key, {
-            dia: `${day}/${m}`,
+            dia: `${day}/${mo}`,
             Total: 0,
             Atendidas: 0,
             TMA: 0,
@@ -100,7 +127,19 @@ export default function ResumoTab({
           "Tx Atend": value.Total ? value.Atendidas / value.Total : 0,
         }));
 
-      return consolidated.length > 0 ? consolidated : dailyChart;
+      return consolidated.length > 0 ? consolidated : (fallback ?? []);
+    };
+
+    // Attendant context: __SELF__ = own data, __ALL__ = team totals
+    if (isAttendant) {
+      const source =
+        dailyCallsAgentSel === "__SELF__" ? fOwnCons : fTeamCons;
+      return buildFromConsList(source, dailyChart);
+    }
+
+    // Master context: __ALL__ = full team, otherwise filter by ramal from fAtend
+    if (dailyCallsAgentSel === "__ALL__") {
+      return buildFromConsList(fCons, dailyChart);
     }
 
     const byDay = new Map();
@@ -112,13 +151,13 @@ export default function ResumoTab({
       if (!d || Number.isNaN(d.getTime())) return;
 
       const y = d.getFullYear();
-      const m = `${d.getMonth() + 1}`.padStart(2, "0");
+      const mo = `${d.getMonth() + 1}`.padStart(2, "0");
       const day = `${d.getDate()}`.padStart(2, "0");
-      const key = `${y}-${m}-${day}`;
+      const key = `${y}-${mo}-${day}`;
 
       if (!byDay.has(key)) {
         byDay.set(key, {
-          dia: `${day}/${m}`,
+          dia: `${day}/${mo}`,
           Total: 0,
           Atendidas: 0,
           TMA: 0,
@@ -145,7 +184,15 @@ export default function ResumoTab({
         TME: value._rows ? Math.round(value.TME / value._rows) : 0,
         "Tx Atend": value.Total ? value.Atendidas / value.Total : 0,
       }));
-  }, [dailyCallsAgentSel, dailyChart, fAtend, fCons]);
+  }, [
+    isAttendant,
+    dailyCallsAgentSel,
+    fOwnCons,
+    fTeamCons,
+    dailyChart,
+    fAtend,
+    fCons,
+  ]);
 
   const atendenteOptions = useMemo(
     () =>
@@ -164,28 +211,37 @@ export default function ResumoTab({
   const dailyTicketEvolution = useMemo(() => {
     const byDay = new Map();
 
-    fTickets.forEach((ticket) => {
-      const responsavel =
-        ticket.responsavel && ticket.responsavel !== "-"
-          ? ticket.responsavel
-          : "(Sem responsável)";
-      if (
-        dailyTicketAgentSel !== "__ALL__" &&
-        responsavel !== dailyTicketAgentSel
-      )
-        return;
+    // Attendant: __SELF__ = own tickets, __ALL__ = team tickets
+    // Master: __ALL__ = all tickets, otherwise filter by responsavel
+    let sourceTickets;
+    if (isAttendant) {
+      sourceTickets =
+        dailyTicketAgentSel === "__SELF__" ? fOwnTickets : fTeamTickets;
+    } else {
+      sourceTickets =
+        dailyTicketAgentSel === "__ALL__"
+          ? fTickets
+          : fTickets.filter((t) => {
+              const resp =
+                t.responsavel && t.responsavel !== "-"
+                  ? t.responsavel
+                  : "(Sem responsável)";
+              return resp === dailyTicketAgentSel;
+            });
+    }
 
+    sourceTickets.forEach((ticket) => {
       const d = ticket.dateReal;
       if (!d || Number.isNaN(d.getTime())) return;
 
       const y = d.getFullYear();
-      const m = `${d.getMonth() + 1}`.padStart(2, "0");
+      const mo = `${d.getMonth() + 1}`.padStart(2, "0");
       const day = `${d.getDate()}`.padStart(2, "0");
-      const key = `${y}-${m}-${day}`;
+      const key = `${y}-${mo}-${day}`;
 
       if (!byDay.has(key)) {
         byDay.set(key, {
-          dia: `${day}/${m}`,
+          dia: `${day}/${mo}`,
           transferencias: 0,
           errosApp: 0,
           outros: 0,
@@ -201,7 +257,13 @@ export default function ResumoTab({
     return Array.from(byDay.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([, value]) => value);
-  }, [fTickets, dailyTicketAgentSel]);
+  }, [
+    isAttendant,
+    dailyTicketAgentSel,
+    fOwnTickets,
+    fTeamTickets,
+    fTickets,
+  ]);
 
   const METRICS = [
     {
@@ -418,12 +480,21 @@ export default function ResumoTab({
                   minWidth: 150,
                 }}
               >
-                <option value="__ALL__">Equipe toda</option>
-                {callsAtendenteOptions.map((nome) => (
-                  <option key={nome} value={nome}>
-                    {nome.replace(" - Central", "")}
-                  </option>
-                ))}
+                {isAttendant ? (
+                  <>
+                    <option value="__SELF__">{attendantDisplayName}</option>
+                    <option value="__ALL__">Totais da equipe</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="__ALL__">Equipe toda</option>
+                    {callsAtendenteOptions.map((nome) => (
+                      <option key={nome} value={nome}>
+                        {nome.replace(" - Central", "")}
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
               {METRICS.map(({ key, label, color }) => (
                 <button
@@ -510,26 +581,45 @@ export default function ResumoTab({
               Evolução Diária · Tickets por Tipo
             </span>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <select
-                value={dailyTicketAgentSel}
-                onChange={(e) => setDailyTicketAgentSel(e.target.value)}
-                style={{
-                  background: P.cardH,
-                  border: `1px solid ${P.bdr}`,
-                  borderRadius: 8,
-                  color: P.text,
-                  padding: "4px 8px",
-                  fontSize: 10,
-                  minWidth: 150,
-                }}
-              >
-                <option value="__ALL__">Equipe toda</option>
-                {atendenteOptions.map((nome) => (
-                  <option key={nome} value={nome}>
-                    {nome}
-                  </option>
-                ))}
-              </select>
+              {isAttendant ? (
+                <select
+                  value={dailyTicketAgentSel}
+                  onChange={(e) => setDailyTicketAgentSel(e.target.value)}
+                  style={{
+                    background: P.cardH,
+                    border: `1px solid ${P.bdr}`,
+                    borderRadius: 8,
+                    color: P.text,
+                    padding: "4px 8px",
+                    fontSize: 10,
+                    minWidth: 150,
+                  }}
+                >
+                  <option value="__SELF__">{attendantDisplayName}</option>
+                  <option value="__ALL__">Totais da equipe</option>
+                </select>
+              ) : (
+                <select
+                  value={dailyTicketAgentSel}
+                  onChange={(e) => setDailyTicketAgentSel(e.target.value)}
+                  style={{
+                    background: P.cardH,
+                    border: `1px solid ${P.bdr}`,
+                    borderRadius: 8,
+                    color: P.text,
+                    padding: "4px 8px",
+                    fontSize: 10,
+                    minWidth: 150,
+                  }}
+                >
+                  <option value="__ALL__">Equipe toda</option>
+                  {atendenteOptions.map((nome) => (
+                    <option key={nome} value={nome}>
+                      {nome}
+                    </option>
+                  ))}
+                </select>
+              )}
               {TICKET_METRICS.map(({ key, label, color }) => (
                 <button
                   key={key}

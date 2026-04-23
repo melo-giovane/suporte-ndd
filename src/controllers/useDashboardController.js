@@ -68,6 +68,11 @@ export function useDashboardController({
   });
   const [teamTotals, setTeamTotals] = useState(null);
   const [ticketGoalPct, setTicketGoalPct] = useState(20);
+  const [teamConsFetched, setTeamConsFetched] = useState([]);
+  const [teamTicketsFetched, setTeamTicketsFetched] = useState([]);
+  const [ownConsFetched, setOwnConsFetched] = useState([]);
+  const [ownAtendFetched, setOwnAtendFetched] = useState([]);
+  const [ownTicketsFetched, setOwnTicketsFetched] = useState([]);
   const restoreRequestIdRef = useRef(0);
   const incrementalFileRef = useRef();
   const reprocessFileRef = useRef();
@@ -151,6 +156,23 @@ export function useDashboardController({
         setAtend(nextAtend);
         setTickets(nextTickets);
         setTeamTotals(data.teamTotals || null);
+
+        const parseConsList = (list) =>
+          (list || []).map((row) => ({
+            ...row,
+            dateReal: parseApiDate(row.dateReal),
+          }));
+        const parseTicketList = (list) =>
+          (list || []).map((row) => ({
+            ...row,
+            dateReal: parseApiDate(row.dataAbertura),
+          }));
+
+        setTeamConsFetched(parseConsList(data.teamCons));
+        setTeamTicketsFetched(parseTicketList(data.teamTickets));
+        setOwnConsFetched(parseConsList(data.ownCons));
+        setOwnAtendFetched(parseConsList(data.ownAtend));
+        setOwnTicketsFetched(parseTicketList(data.ownTickets));
         const nextTicketGoalPct = Number(data.ticketGoalPct);
         if (Number.isFinite(nextTicketGoalPct)) {
           setTicketGoalPct(nextTicketGoalPct);
@@ -312,6 +334,60 @@ export function useDashboardController({
     [tickets, dateFrom, dateTo, dayTypeFilter],
   );
 
+  // Cross-scope filtered data for attendant daily evolution cards.
+  // When viewScope="own": fOwnCons=fCons, fTeamCons uses teamConsFetched from API.
+  // When viewScope="team": fTeamCons=fCons, fOwnCons uses ownConsFetched from API.
+  const fOwnCons = useMemo(
+    () =>
+      filterByDateRange(
+        viewScope === "own" ? cons : ownConsFetched,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [viewScope, cons, ownConsFetched, dateFrom, dateTo, dayTypeFilter],
+  );
+  const fTeamCons = useMemo(
+    () =>
+      filterByDateRange(
+        viewScope === "team" ? cons : teamConsFetched,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [viewScope, cons, teamConsFetched, dateFrom, dateTo, dayTypeFilter],
+  );
+  const fOwnAtend = useMemo(
+    () =>
+      filterByDateRange(
+        viewScope === "own" ? atend : ownAtendFetched,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [viewScope, atend, ownAtendFetched, dateFrom, dateTo, dayTypeFilter],
+  );
+  const fOwnTickets = useMemo(
+    () =>
+      filterByDateRange(
+        viewScope === "own" ? tickets : ownTicketsFetched,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [viewScope, tickets, ownTicketsFetched, dateFrom, dateTo, dayTypeFilter],
+  );
+  const fTeamTickets = useMemo(
+    () =>
+      filterByDateRange(
+        viewScope === "team" ? tickets : teamTicketsFetched,
+        dateFrom,
+        dateTo,
+        dayTypeFilter,
+      ),
+    [viewScope, tickets, teamTicketsFetched, dateFrom, dateTo, dayTypeFilter],
+  );
+
   const kpis = useMemo(() => buildKpis(fCons, fTickets), [fCons, fTickets]);
 
   const dateRangeInvalid =
@@ -379,6 +455,11 @@ export function useDashboardController({
     fCons,
     fAtend,
     fTickets,
+    fOwnCons,
+    fTeamCons,
+    fOwnAtend,
+    fOwnTickets,
+    fTeamTickets,
     kpis,
     dateRangeInvalid,
     catData,

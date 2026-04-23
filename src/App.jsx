@@ -542,6 +542,11 @@ export default function App() {
     fCons,
     fAtend,
     fTickets,
+    fOwnCons,
+    fTeamCons,
+    fOwnAtend,
+    fOwnTickets,
+    fTeamTickets,
     kpis,
     dateRangeInvalid,
     catData,
@@ -1943,6 +1948,22 @@ export default function App() {
               setSeriesVis={setSeriesVis}
               onTicketDrilldown={handleTicketDrilldown}
               isAttendantOwnScope={isAttendant && attendantScope === "own"}
+              isAttendant={isAttendant}
+              attendantDisplayName={
+                isAttendant
+                  ? String(authUser?.attendantRamal || "")
+                      .trim()
+                      .replace(" - Central", "") ||
+                    String(authUser?.attendantResponsavel || "").trim() ||
+                    authUser?.username ||
+                    "Eu"
+                  : ""
+              }
+              fOwnCons={fOwnCons}
+              fTeamCons={fTeamCons}
+              fOwnAtend={fOwnAtend}
+              fOwnTickets={fOwnTickets}
+              fTeamTickets={fTeamTickets}
               isMasterView={isMaster}
               ticketGoalPct={ticketGoalPct}
             />
