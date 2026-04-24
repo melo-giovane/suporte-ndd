@@ -68,11 +68,13 @@ export function useDashboardController({
   });
   const [teamTotals, setTeamTotals] = useState(null);
   const [ticketGoalPct, setTicketGoalPct] = useState(20);
-  const [teamConsFetched, setTeamConsFetched] = useState([]);
-  const [teamTicketsFetched, setTeamTicketsFetched] = useState([]);
-  const [ownConsFetched, setOwnConsFetched] = useState([]);
-  const [ownAtendFetched, setOwnAtendFetched] = useState([]);
-  const [ownTicketsFetched, setOwnTicketsFetched] = useState([]);
+  // Dedicated own/team datasets — always populated regardless of viewScope.
+  const [allOwnCons, setAllOwnCons] = useState([]);
+  const [allOwnAtend, setAllOwnAtend] = useState([]);
+  const [allOwnTickets, setAllOwnTickets] = useState([]);
+  const [allTeamCons, setAllTeamCons] = useState([]);
+  const [allTeamAtend, setAllTeamAtend] = useState([]);
+  const [allTeamTickets, setAllTeamTickets] = useState([]);
   const restoreRequestIdRef = useRef(0);
   const incrementalFileRef = useRef();
   const reprocessFileRef = useRef();
@@ -168,11 +170,12 @@ export function useDashboardController({
             dateReal: parseApiDate(row.dataAbertura),
           }));
 
-        setTeamConsFetched(parseConsList(data.teamCons));
-        setTeamTicketsFetched(parseTicketList(data.teamTickets));
-        setOwnConsFetched(parseConsList(data.ownCons));
-        setOwnAtendFetched(parseConsList(data.ownAtend));
-        setOwnTicketsFetched(parseTicketList(data.ownTickets));
+        setAllOwnCons(parseConsList(data.ownCons));
+        setAllOwnAtend(parseConsList(data.ownAtend));
+        setAllOwnTickets(parseTicketList(data.ownTickets));
+        setAllTeamCons(parseConsList(data.teamCons));
+        setAllTeamAtend(parseConsList(data.teamAtend));
+        setAllTeamTickets(parseTicketList(data.teamTickets));
         const nextTicketGoalPct = Number(data.ticketGoalPct);
         if (Number.isFinite(nextTicketGoalPct)) {
           setTicketGoalPct(nextTicketGoalPct);
@@ -334,58 +337,30 @@ export function useDashboardController({
     [tickets, dateFrom, dateTo, dayTypeFilter],
   );
 
-  // Cross-scope filtered data for attendant daily evolution cards.
-  // When viewScope="own": fOwnCons=fCons, fTeamCons uses teamConsFetched from API.
-  // When viewScope="team": fTeamCons=fCons, fOwnCons uses ownConsFetched from API.
+  // Dedicated own/team filtered data — always populated regardless of viewScope.
   const fOwnCons = useMemo(
-    () =>
-      filterByDateRange(
-        viewScope === "own" ? cons : ownConsFetched,
-        dateFrom,
-        dateTo,
-        dayTypeFilter,
-      ),
-    [viewScope, cons, ownConsFetched, dateFrom, dateTo, dayTypeFilter],
+    () => filterByDateRange(allOwnCons, dateFrom, dateTo, dayTypeFilter),
+    [allOwnCons, dateFrom, dateTo, dayTypeFilter],
   );
   const fTeamCons = useMemo(
-    () =>
-      filterByDateRange(
-        viewScope === "team" ? cons : teamConsFetched,
-        dateFrom,
-        dateTo,
-        dayTypeFilter,
-      ),
-    [viewScope, cons, teamConsFetched, dateFrom, dateTo, dayTypeFilter],
+    () => filterByDateRange(allTeamCons, dateFrom, dateTo, dayTypeFilter),
+    [allTeamCons, dateFrom, dateTo, dayTypeFilter],
   );
   const fOwnAtend = useMemo(
-    () =>
-      filterByDateRange(
-        viewScope === "own" ? atend : ownAtendFetched,
-        dateFrom,
-        dateTo,
-        dayTypeFilter,
-      ),
-    [viewScope, atend, ownAtendFetched, dateFrom, dateTo, dayTypeFilter],
+    () => filterByDateRange(allOwnAtend, dateFrom, dateTo, dayTypeFilter),
+    [allOwnAtend, dateFrom, dateTo, dayTypeFilter],
+  );
+  const fTeamAtend = useMemo(
+    () => filterByDateRange(allTeamAtend, dateFrom, dateTo, dayTypeFilter),
+    [allTeamAtend, dateFrom, dateTo, dayTypeFilter],
   );
   const fOwnTickets = useMemo(
-    () =>
-      filterByDateRange(
-        viewScope === "own" ? tickets : ownTicketsFetched,
-        dateFrom,
-        dateTo,
-        dayTypeFilter,
-      ),
-    [viewScope, tickets, ownTicketsFetched, dateFrom, dateTo, dayTypeFilter],
+    () => filterByDateRange(allOwnTickets, dateFrom, dateTo, dayTypeFilter),
+    [allOwnTickets, dateFrom, dateTo, dayTypeFilter],
   );
   const fTeamTickets = useMemo(
-    () =>
-      filterByDateRange(
-        viewScope === "team" ? tickets : teamTicketsFetched,
-        dateFrom,
-        dateTo,
-        dayTypeFilter,
-      ),
-    [viewScope, tickets, teamTicketsFetched, dateFrom, dateTo, dayTypeFilter],
+    () => filterByDateRange(allTeamTickets, dateFrom, dateTo, dayTypeFilter),
+    [allTeamTickets, dateFrom, dateTo, dayTypeFilter],
   );
 
   const kpis = useMemo(() => buildKpis(fCons, fTickets), [fCons, fTickets]);
@@ -419,10 +394,22 @@ export function useDashboardController({
     [fTickets],
   );
 
-  const equipe = useMemo(
-    () => buildEquipeData(fAtend, fTickets),
-    [fAtend, fTickets],
-  );
+  const equipe = useMemo(() => {
+    // viewScope="own" only happens for attendants in "Meus" mode.
+    // Show only entries with data (only the own attendant's row will be non-zero).
+    if (viewScope === "own") {
+      return buildEquipeData(fOwnAtend, fOwnTickets).filter(
+        (e) => e.total > 0,
+      );
+    }
+    // viewScope="team" with fTeamAtend available → attendant in "Totais da equipe"
+    // or master. Use full team data so the equipe chart shows all members.
+    if (fTeamAtend.length > 0) {
+      return buildEquipeData(fTeamAtend, fTeamTickets);
+    }
+    // Fallback (master without dedicated teamAtend): use primary fAtend/fTickets.
+    return buildEquipeData(fAtend, fTickets);
+  }, [viewScope, fAtend, fOwnAtend, fTeamAtend, fTickets, fOwnTickets, fTeamTickets]);
 
   const dailyChart = useMemo(() => buildDailyChart(fCons), [fCons]);
 
@@ -458,6 +445,7 @@ export function useDashboardController({
     fOwnCons,
     fTeamCons,
     fOwnAtend,
+    fTeamAtend,
     fOwnTickets,
     fTeamTickets,
     kpis,

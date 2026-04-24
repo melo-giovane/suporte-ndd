@@ -352,7 +352,16 @@ function readDashboardData(db) {
     )
     .all();
 
-  return { cons, atend, tickets };
+  // Masters always see the full team, so expose the same data under the
+  // `team*` aliases so the frontend can use a unified shape.
+  return {
+    cons,
+    atend,
+    tickets,
+    teamCons: cons,
+    teamAtend: atend,
+    teamTickets: tickets,
+  };
 }
 
 function readDashboardDataForAttendant(db, user, scope) {
@@ -483,22 +492,35 @@ function readDashboardDataForAttendant(db, user, scope) {
         .all(responsavel)
     : [];
 
-  if (scope === "team") {
-    return {
-      cons: teamCons,
-      atend: [],
-      tickets: teamTickets,
-      ownCons,
-      ownAtend,
-      ownTickets,
-    };
-  }
+  const teamAtend = db
+    .prepare(
+      `
+      SELECT
+        data_label AS data,
+        ramal,
+        total_tentativas AS tentativas,
+        tentativas_atendidas AS atendidas,
+        tentativas_perdidas AS perdidas,
+        tma_seg AS tma,
+        tme_seg AS tme,
+        hora,
+        date_real AS dateReal
+      FROM atplus_attendant_daily
+      ORDER BY date_real, hora, ramal
+    `,
+    )
+    .all();
 
+  // Always return both own and team datasets regardless of scope.
   return {
-    cons: ownCons,
-    atend: ownAtend,
-    tickets: ownTickets,
+    cons: scope === "team" ? teamCons : ownCons,
+    atend: scope === "team" ? teamAtend : ownAtend,
+    tickets: scope === "team" ? teamTickets : ownTickets,
+    ownCons,
+    ownAtend,
+    ownTickets,
     teamCons,
+    teamAtend,
     teamTickets,
   };
 }
