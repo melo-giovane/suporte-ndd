@@ -18,7 +18,8 @@
     "preview": "vite preview",
     "db:init": "node scripts/db/init-db.js",
     "db:import": "node scripts/db/import-dashboard.js",
-    "db:update-daily": "node scripts/db/update-daily.js"
+    "db:update-daily": "node scripts/db/update-daily.js",
+    "db:clean-today": "node scripts/db/clean-today.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
