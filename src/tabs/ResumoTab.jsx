@@ -47,6 +47,7 @@ export default function ResumoTab({
   fOwnAtend = [],
   fOwnTickets = [],
   fTeamTickets = [],
+  attendantsCatalog = [],
   isMasterView = false,
   ticketGoalPct = 20,
 }) {
@@ -77,11 +78,59 @@ export default function ResumoTab({
 
   const callsAtendenteOptions = useMemo(
     () =>
-      Array.from(new Set(fAtend.map((a) => a.ramal).filter(Boolean))).sort(
-        (a, b) => a.localeCompare(b, "pt-BR"),
-      ),
-    [fAtend],
+      attendantsCatalog
+        .map((attendant) => ({
+          value: attendant.atplusAlias || attendant.name,
+          label:
+            attendant.name || attendant.atplusAlias || attendant.ticketsAlias,
+        }))
+        .filter((attendant) => Boolean(attendant.value))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
+    [attendantsCatalog],
   );
+
+  const callsAtendenteValues = useMemo(
+    () => callsAtendenteOptions.map((attendant) => attendant.value),
+    [callsAtendenteOptions],
+  );
+
+  const atendenteOptions = useMemo(
+    () =>
+      attendantsCatalog
+        .map((attendant) => ({
+          value: attendant.ticketsAlias || attendant.name,
+          label:
+            attendant.name || attendant.ticketsAlias || attendant.atplusAlias,
+        }))
+        .filter((attendant) => Boolean(attendant.value))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
+    [attendantsCatalog],
+  );
+
+  const atendenteOptionValues = useMemo(
+    () => atendenteOptions.map((attendant) => attendant.value),
+    [atendenteOptions],
+  );
+
+  useEffect(() => {
+    if (
+      !isAttendant &&
+      dailyCallsAgentSel !== "__ALL__" &&
+      !callsAtendenteValues.includes(dailyCallsAgentSel)
+    ) {
+      setDailyCallsAgentSel("__ALL__");
+    }
+  }, [callsAtendenteValues, dailyCallsAgentSel, isAttendant]);
+
+  useEffect(() => {
+    if (
+      !isAttendant &&
+      dailyTicketAgentSel !== "__ALL__" &&
+      !atendenteOptionValues.includes(dailyTicketAgentSel)
+    ) {
+      setDailyTicketAgentSel("__ALL__");
+    }
+  }, [atendenteOptionValues, dailyTicketAgentSel, isAttendant]);
 
   const dailyCallsEvolution = useMemo(() => {
     const buildFromConsList = (sourceList, fallback) => {
@@ -132,8 +181,7 @@ export default function ResumoTab({
 
     // Attendant context: __SELF__ = own data, __ALL__ = team totals
     if (isAttendant) {
-      const source =
-        dailyCallsAgentSel === "__SELF__" ? fOwnCons : fTeamCons;
+      const source = dailyCallsAgentSel === "__SELF__" ? fOwnCons : fTeamCons;
       return buildFromConsList(source, dailyChart);
     }
 
@@ -194,20 +242,6 @@ export default function ResumoTab({
     fCons,
   ]);
 
-  const atendenteOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          fTickets.map((t) =>
-            t.responsavel && t.responsavel !== "-"
-              ? t.responsavel
-              : "(Sem responsável)",
-          ),
-        ),
-      ).sort((a, b) => a.localeCompare(b, "pt-BR")),
-    [fTickets],
-  );
-
   const dailyTicketEvolution = useMemo(() => {
     const byDay = new Map();
 
@@ -222,11 +256,7 @@ export default function ResumoTab({
         dailyTicketAgentSel === "__ALL__"
           ? fTickets
           : fTickets.filter((t) => {
-              const resp =
-                t.responsavel && t.responsavel !== "-"
-                  ? t.responsavel
-                  : "(Sem responsável)";
-              return resp === dailyTicketAgentSel;
+              return t.responsavel === dailyTicketAgentSel;
             });
     }
 
@@ -257,13 +287,7 @@ export default function ResumoTab({
     return Array.from(byDay.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([, value]) => value);
-  }, [
-    isAttendant,
-    dailyTicketAgentSel,
-    fOwnTickets,
-    fTeamTickets,
-    fTickets,
-  ]);
+  }, [isAttendant, dailyTicketAgentSel, fOwnTickets, fTeamTickets, fTickets]);
 
   const METRICS = [
     {
@@ -488,9 +512,9 @@ export default function ResumoTab({
                 ) : (
                   <>
                     <option value="__ALL__">Equipe toda</option>
-                    {callsAtendenteOptions.map((nome) => (
-                      <option key={nome} value={nome}>
-                        {nome.replace(" - Central", "")}
+                    {callsAtendenteOptions.map((attendant) => (
+                      <option key={attendant.value} value={attendant.value}>
+                        {attendant.label.replace(" - Central", "")}
                       </option>
                     ))}
                   </>
@@ -613,9 +637,9 @@ export default function ResumoTab({
                   }}
                 >
                   <option value="__ALL__">Equipe toda</option>
-                  {atendenteOptions.map((nome) => (
-                    <option key={nome} value={nome}>
-                      {nome}
+                  {atendenteOptions.map((attendant) => (
+                    <option key={attendant.value} value={attendant.value}>
+                      {attendant.label}
                     </option>
                   ))}
                 </select>

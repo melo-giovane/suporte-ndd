@@ -1,5 +1,4 @@
 import {
-  AGENT_MAP,
   parseDataPt,
   parseSec,
   normalize,
@@ -415,30 +414,50 @@ export function aggregateBy(arr, key) {
     .map(([name, value]) => ({ name, value }));
 }
 
-export function buildEquipeData(fAtend, fTickets) {
-  return Object.entries(AGENT_MAP)
-    .map(([fn, en]) => {
-      const fa = fAtend.filter((a) => a.ramal === fn);
-      const ft = fTickets.filter((t) => t.responsavel === en);
-      const ca = fa.reduce((a, c) => a + c.atendidas, 0);
+export function buildEquipeData(fAtend, fTickets, attendantsCatalog = []) {
+  const normalizeText = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  return attendantsCatalog
+    .map((attendant) => {
+      const atplusAlias = String(attendant?.atplusAlias || "").trim();
+      const ticketsAlias = String(attendant?.ticketsAlias || "").trim();
+      const displayName = String(attendant?.name || "").trim();
+
+      const fa = fAtend.filter(
+        (row) => normalizeText(row.ramal) === normalizeText(atplusAlias),
+      );
+      const ft = fTickets.filter(
+        (ticket) =>
+          normalizeText(ticket.responsavel) === normalizeText(ticketsAlias),
+      );
+      const ca = fa.reduce((sum, row) => sum + (Number(row.atendidas) || 0), 0);
 
       return {
-        nome: fn.replace(" - Central", ""),
+        nome: displayName || atplusAlias || ticketsAlias || "Sem nome",
         chamAtend: ca,
         tickets: ft.length,
-        tktAbertos: ft.filter((t) => t.status === "Aberto").length,
+        tktAbertos: ft.filter((ticket) => ticket.status === "Aberto").length,
         total: ca + ft.length,
         tma: fa.length
-          ? Math.round(fa.reduce((a, c) => a + c.tma, 0) / fa.length)
+          ? Math.round(
+              fa.reduce((sum, row) => sum + (Number(row.tma) || 0), 0) /
+                fa.length,
+            )
           : 0,
         tme: fa.length
-          ? Math.round(fa.reduce((a, c) => a + c.tme, 0) / fa.length)
+          ? Math.round(
+              fa.reduce((sum, row) => sum + (Number(row.tme) || 0), 0) /
+                fa.length,
+            )
           : 0,
         transferencias: ft.filter(isTransferencia).length,
         errosApp: ft.filter(isErroApp).length,
       };
     })
-    .sort((a, b) => b.total - a.total);
+    .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
 export function buildDailyChart(fCons) {

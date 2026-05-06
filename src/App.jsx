@@ -460,6 +460,16 @@ export default function App() {
     state: "idle",
     message: "",
   });
+  const [attendantForm, setAttendantForm] = useState({
+    id: "",
+    name: "",
+    atplusAlias: "",
+    ticketsAlias: "",
+  });
+  const [attendantMgmtStatus, setAttendantMgmtStatus] = useState({
+    state: "idle",
+    message: "",
+  });
   const [ticketGoalInput, setTicketGoalInput] = useState("20");
   const [ticketGoalStatus, setTicketGoalStatus] = useState({
     state: "idle",
@@ -512,6 +522,13 @@ export default function App() {
     setAuthUser(null);
     setUsersList([]);
     setAttendantScope("own");
+    setAttendantForm({
+      id: "",
+      name: "",
+      atplusAlias: "",
+      ticketsAlias: "",
+    });
+    setAttendantMgmtStatus({ state: "idle", message: "" });
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("auth-token");
       window.localStorage.removeItem("auth-user");
@@ -570,6 +587,7 @@ export default function App() {
     viewScope: isAttendant ? attendantScope : "team",
     canUpload: isMaster,
     onUnauthorized: handleLogout,
+    attendantsCatalog: userLinkOptions.attendants,
   });
 
   const totalDaysCount = useMemo(() => {
@@ -633,6 +651,18 @@ export default function App() {
       }));
     }
   }, [authToken, isMaster]);
+
+  const loadAttendantIntoForm = useCallback((attendant) => {
+    if (!attendant) return;
+
+    setAttendantForm({
+      id: String(attendant.id || ""),
+      name: attendant.name || "",
+      atplusAlias: attendant.atplusAlias || "",
+      ticketsAlias: attendant.ticketsAlias || "",
+    });
+    setAttendantMgmtStatus({ state: "idle", message: "" });
+  }, []);
 
   const handleLogin = useCallback(
     async (e) => {
@@ -723,6 +753,114 @@ export default function App() {
     [authToken, fetchUsers, userForm],
   );
 
+  const handleSaveAttendant = useCallback(
+    async (e) => {
+      e.preventDefault();
+
+      setAttendantMgmtStatus({
+        state: "saving",
+        message: attendantForm.id
+          ? "Atualizando atendente..."
+          : "Salvando atendente...",
+      });
+
+      try {
+        const payload = {
+          id: attendantForm.id,
+          name: attendantForm.name.trim(),
+          atplusAlias: attendantForm.atplusAlias.trim(),
+          ticketsAlias: attendantForm.ticketsAlias.trim(),
+        };
+
+        const resp = await fetch(apiUrl("/api/attendants"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const body = await resp.json();
+        if (!resp.ok) {
+          throw new Error(body?.error || "Falha ao salvar atendente.");
+        }
+
+        setAttendantForm({
+          id: "",
+          name: "",
+          atplusAlias: "",
+          ticketsAlias: "",
+        });
+        setAttendantMgmtStatus({
+          state: "success",
+          message: `Atendente ${body?.attendant?.name || ""} salvo com sucesso.`,
+        });
+        await fetchUserLinkOptions();
+      } catch (error) {
+        setAttendantMgmtStatus({
+          state: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Falha ao salvar atendente.",
+        });
+      }
+    },
+    [attendantForm, authToken, fetchUserLinkOptions],
+  );
+
+  const handleClearAttendants = useCallback(async () => {
+    const confirmed =
+      typeof window === "undefined"
+        ? true
+        : window.confirm(
+            "Tem certeza que deseja limpar toda a tabela de atendentes? Os vínculos dos usuários serão removidos.",
+          );
+
+    if (!confirmed) return;
+
+    setAttendantMgmtStatus({
+      state: "saving",
+      message: "Limpando tabela de atendentes...",
+    });
+
+    try {
+      const resp = await fetch(apiUrl("/api/attendants"), {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      const body = await resp.json();
+      if (!resp.ok) {
+        throw new Error(body?.error || "Falha ao limpar atendentes.");
+      }
+
+      setAttendantForm({
+        id: "",
+        name: "",
+        atplusAlias: "",
+        ticketsAlias: "",
+      });
+      setAttendantMgmtStatus({
+        state: "success",
+        message: "Tabela de atendentes limpa com sucesso.",
+      });
+      await fetchUserLinkOptions();
+      await fetchUsers();
+    } catch (error) {
+      setAttendantMgmtStatus({
+        state: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Falha ao limpar atendentes.",
+      });
+    }
+  }, [authToken, fetchUserLinkOptions, fetchUsers]);
+
   const handleSaveTicketGoal = useCallback(
     async (e) => {
       e.preventDefault();
@@ -793,6 +931,13 @@ export default function App() {
     } else {
       setUsersList([]);
       setUserLinkOptions({ attendants: [] });
+      setAttendantForm({
+        id: "",
+        name: "",
+        atplusAlias: "",
+        ticketsAlias: "",
+      });
+      setAttendantMgmtStatus({ state: "idle", message: "" });
     }
   }, [fetchUserLinkOptions, fetchUsers, isMaster]);
 
@@ -1404,7 +1549,7 @@ export default function App() {
               fontWeight: 800,
             }}
           >
-            Login · Central de Relacionamentos
+            Login · Suporte NDD
           </h1>
           <p style={{ margin: "8px 0 18px", fontSize: 12, color: P.dim }}>
             Acesso por perfil: master ou atendente.
@@ -1532,7 +1677,7 @@ export default function App() {
               letterSpacing: -0.5,
             }}
           >
-            Central de Relacionamentos NDD
+            Suporte NDD
           </h1>
           <p style={{ color: P.dim, fontSize: 14, margin: "0 0 28px" }}>
             Tentando carregar os dados salvos no SQLite...
@@ -1595,7 +1740,7 @@ export default function App() {
                   themeMode === "dark" ? "transparent" : P.accent,
               }}
             >
-              Central de Relacionamentos NDD
+              Suporte NDD
             </h1>
             <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
               {kpis.dias} dias filtrados · {totalDaysCount} dias total ·{" "}
@@ -1964,6 +2109,7 @@ export default function App() {
               fOwnAtend={fOwnAtend}
               fOwnTickets={fOwnTickets}
               fTeamTickets={fTeamTickets}
+              attendantsCatalog={userLinkOptions.attendants}
               isMasterView={isMaster}
               ticketGoalPct={ticketGoalPct}
             />
@@ -3429,6 +3575,259 @@ export default function App() {
                       {userMgmtStatus.message}
                     </div>
                   )}
+                </form>
+
+                <form
+                  onSubmit={handleSaveAttendant}
+                  style={{
+                    background: P.card,
+                    borderRadius: 14,
+                    border: `1px solid ${P.bdr}`,
+                    padding: 14,
+                    flex: "1 1 360px",
+                    minWidth: 320,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: P.dim,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Novo / editar atendente
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <select
+                      value={attendantForm.id}
+                      onChange={(e) => {
+                        const selected = userLinkOptions.attendants.find(
+                          (attendant) =>
+                            String(attendant.id) === e.target.value,
+                        );
+                        if (!selected) {
+                          setAttendantForm({
+                            id: "",
+                            name: "",
+                            atplusAlias: "",
+                            ticketsAlias: "",
+                          });
+                          return;
+                        }
+                        loadAttendantIntoForm(selected);
+                      }}
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                    >
+                      <option value="">Novo atendente</option>
+                      {userLinkOptions.attendants.map((attendant) => (
+                        <option key={attendant.id} value={attendant.id}>
+                          {attendant.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      placeholder="Nome"
+                      value={attendantForm.name}
+                      onChange={(e) =>
+                        setAttendantForm((v) => ({
+                          ...v,
+                          name: e.target.value,
+                        }))
+                      }
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                      required
+                    />
+                    <input
+                      placeholder="AtPlus alias"
+                      value={attendantForm.atplusAlias}
+                      onChange={(e) =>
+                        setAttendantForm((v) => ({
+                          ...v,
+                          atplusAlias: e.target.value,
+                        }))
+                      }
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                      required
+                    />
+                    <input
+                      placeholder="Ellevo alias"
+                      value={attendantForm.ticketsAlias}
+                      onChange={(e) =>
+                        setAttendantForm((v) => ({
+                          ...v,
+                          ticketsAlias: e.target.value,
+                        }))
+                      }
+                      style={{
+                        background: P.cardH,
+                        border: `1px solid ${P.bdr}`,
+                        borderRadius: 8,
+                        color: P.text,
+                        padding: "8px 10px",
+                        fontSize: 12,
+                      }}
+                      required
+                    />
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="submit"
+                        style={{
+                          background: P.accent,
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 8,
+                          padding: "9px 10px",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Salvar atendente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttendantForm({
+                            id: "",
+                            name: "",
+                            atplusAlias: "",
+                            ticketsAlias: "",
+                          })
+                        }
+                        style={{
+                          background: "transparent",
+                          color: P.dim,
+                          border: `1px solid ${P.bdr}`,
+                          borderRadius: 8,
+                          padding: "9px 10px",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Limpar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearAttendants}
+                        style={{
+                          background: "transparent",
+                          color: P.red,
+                          border: `1px solid ${P.red}`,
+                          borderRadius: 8,
+                          padding: "9px 10px",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Limpar tabela
+                      </button>
+                    </div>
+                  </div>
+
+                  {attendantMgmtStatus.state !== "idle" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 12,
+                        color:
+                          attendantMgmtStatus.state === "success"
+                            ? P.green
+                            : attendantMgmtStatus.state === "error"
+                              ? P.red
+                              : P.dim,
+                      }}
+                    >
+                      {attendantMgmtStatus.message}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 12 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: P.dim,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      Atendentes cadastrados
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 8,
+                        maxHeight: 220,
+                        overflow: "auto",
+                        paddingRight: 2,
+                      }}
+                    >
+                      {userLinkOptions.attendants.length ? (
+                        userLinkOptions.attendants.map((attendant) => (
+                          <button
+                            key={attendant.id}
+                            type="button"
+                            onClick={() => loadAttendantIntoForm(attendant)}
+                            style={{
+                              textAlign: "left",
+                              background: P.cardH,
+                              border: `1px solid ${P.bdr}`,
+                              borderRadius: 10,
+                              color: P.text,
+                              padding: "8px 10px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <div style={{ fontSize: 12, fontWeight: 700 }}>
+                              {attendant.name}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: P.dim,
+                                marginTop: 2,
+                              }}
+                            >
+                              {attendant.atplusAlias || "-"} ·{" "}
+                              {attendant.ticketsAlias || "-"}
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 12, color: P.dim }}>
+                          Nenhum atendente cadastrado.
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </form>
 
                 <form

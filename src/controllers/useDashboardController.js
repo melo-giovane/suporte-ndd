@@ -38,6 +38,7 @@ export function useDashboardController({
   viewScope = "own",
   canUpload = false,
   onUnauthorized,
+  attendantsCatalog = [],
 } = {}) {
   const [cons, setCons] = useState([]);
   const [atend, setAtend] = useState([]);
@@ -368,7 +369,14 @@ export function useDashboardController({
   const dateRangeInvalid =
     dateFrom !== "" && dateTo !== "" && dateTo < dateFrom;
 
-  const catData = useMemo(() => aggregateBy(fTickets, "categoria"), [fTickets]);
+  const catData = useMemo(
+    () =>
+      aggregateBy(fTickets, (t) => {
+        const q = t.qualificacao;
+        return q && q !== "-" ? q : "(sem qualificação)";
+      }),
+    [fTickets],
+  );
   const sevData = useMemo(
     () =>
       aggregateBy(fTickets, (t) =>
@@ -398,18 +406,27 @@ export function useDashboardController({
     // viewScope="own" only happens for attendants in "Meus" mode.
     // Show only entries with data (only the own attendant's row will be non-zero).
     if (viewScope === "own") {
-      return buildEquipeData(fOwnAtend, fOwnTickets).filter(
+      return buildEquipeData(fOwnAtend, fOwnTickets, attendantsCatalog).filter(
         (e) => e.total > 0,
       );
     }
     // viewScope="team" with fTeamAtend available → attendant in "Totais da equipe"
     // or master. Use full team data so the equipe chart shows all members.
     if (fTeamAtend.length > 0) {
-      return buildEquipeData(fTeamAtend, fTeamTickets);
+      return buildEquipeData(fTeamAtend, fTeamTickets, attendantsCatalog);
     }
     // Fallback (master without dedicated teamAtend): use primary fAtend/fTickets.
-    return buildEquipeData(fAtend, fTickets);
-  }, [viewScope, fAtend, fOwnAtend, fTeamAtend, fTickets, fOwnTickets, fTeamTickets]);
+    return buildEquipeData(fAtend, fTickets, attendantsCatalog);
+  }, [
+    viewScope,
+    fAtend,
+    fOwnAtend,
+    fTeamAtend,
+    fTickets,
+    fOwnTickets,
+    fTeamTickets,
+    attendantsCatalog,
+  ]);
 
   const dailyChart = useMemo(() => buildDailyChart(fCons), [fCons]);
 

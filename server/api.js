@@ -4,7 +4,14 @@ import process from "node:process";
 import express from "express";
 import multer from "multer";
 import { importDashboardToSqlite } from "../scripts/db/import-service.js";
-import { PROJECT_ROOT, ensureSchema, openDatabase } from "../scripts/db/db.js";
+import {
+  clearAttendants,
+  PROJECT_ROOT,
+  ensureSchema,
+  listAttendants,
+  openDatabase,
+  saveAttendant,
+} from "../scripts/db/db.js";
 import {
   createSessionToken,
   hashPassword,
@@ -43,6 +50,17 @@ function sanitizeUser(row) {
       row.attendant_tickets_alias || row.attendant_responsavel || null,
     isActive: row.is_active === 1,
     createdAt: row.created_at || null,
+  };
+}
+
+function sanitizeAttendant(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    atplusAlias: row.atplusAlias || row.atplus_alias || null,
+    ticketsAlias: row.ticketsAlias || row.tickets_alias || null,
+    createdAt: row.createdAt || row.created_at || null,
   };
 }
 
@@ -225,7 +243,9 @@ function requireAuth(req, res, next) {
 
   if (Date.now() - new Date(session.createdAt).getTime() > SESSION_TTL_MS) {
     sessions.delete(token);
-    return res.status(401).json({ ok: false, error: "Sessão expirada. Faça login novamente." });
+    return res
+      .status(401)
+      .json({ ok: false, error: "Sessão expirada. Faça login novamente." });
   }
 
   let db;
@@ -340,7 +360,7 @@ function readDashboardData(db) {
         responsavel,
         qualificacao,
         severidade,
-        categoria_normalizada AS categoria,
+        qualificacao AS categoria,
         cliente,
         modulo,
         tramites,
@@ -402,7 +422,7 @@ function readDashboardDataForAttendant(db, user, scope) {
         responsavel,
         qualificacao,
         severidade,
-        categoria_normalizada AS categoria,
+        qualificacao AS categoria,
         cliente,
         modulo,
         tramites,
@@ -478,7 +498,7 @@ function readDashboardDataForAttendant(db, user, scope) {
             responsavel,
             qualificacao,
             severidade,
-            categoria_normalizada AS categoria,
+            qualificacao AS categoria,
             cliente,
             modulo,
             tramites,
@@ -696,19 +716,7 @@ app.get("/api/users/link-options", requireAuth, requireMaster, (_, res) => {
     db = openDatabase();
     ensureSchema(db);
 
-    const attendants = db
-      .prepare(
-        `
-        SELECT
-          id,
-          name,
-          atplus_alias AS atplusAlias,
-          tickets_alias AS ticketsAlias
-        FROM attendants
-        ORDER BY name COLLATE NOCASE
-      `,
-      )
-      .all();
+    const attendants = listAttendants(db);
 
     return res.json({
       ok: true,
@@ -716,6 +724,90 @@ app.get("/api/users/link-options", requireAuth, requireMaster, (_, res) => {
         attendants,
       },
     });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+    });
+  } finally {
+    if (db) db.close();
+  }
+});
+
+app.get("/api/attendants", requireAuth, requireMaster, (_, res) => {
+  let db;
+  try {
+    db = openDatabase();
+    ensureSchema(db);
+
+    return res.json({
+      ok: true,
+      attendants: listAttendants(db),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+    });
+  } finally {
+    if (db) db.close();
+  }
+});
+
+app.post("/api/attendants", requireAuth, requireMaster, (req, res) => {
+  const attendantIdRaw = req.body?.id;
+  const attendantId =
+    attendantIdRaw === null ||
+    attendantIdRaw === undefined ||
+    attendantIdRaw === ""
+      ? null
+      : Number.parseInt(String(attendantIdRaw), 10);
+  const name = String(req.body?.name || "").trim();
+  const atplusAlias = String(req.body?.atplusAlias || "").trim();
+  const ticketsAlias = String(req.body?.ticketsAlias || "").trim();
+
+  if (!name || !atplusAlias || !ticketsAlias) {
+    return res.status(400).json({
+      ok: false,
+      error: "Informe nome, apelido AtPlus e apelido Ellevo.",
+    });
+  }
+
+  let db;
+  try {
+    db = openDatabase();
+    ensureSchema(db);
+
+    const saved = saveAttendant(db, {
+      id: attendantId,
+      name,
+      atplusAlias,
+      ticketsAlias,
+    });
+
+    return res.json({ ok: true, attendant: sanitizeAttendant(saved) });
+  } catch (error) {
+    const message =
+      error instanceof Error && /UNIQUE/.test(error.message)
+        ? "Já existe um atendente com esse nome ou apelidos."
+        : error instanceof Error
+          ? error.message
+          : "Erro desconhecido";
+
+    return res.status(400).json({ ok: false, error: message });
+  } finally {
+    if (db) db.close();
+  }
+});
+
+app.delete("/api/attendants", requireAuth, requireMaster, (_, res) => {
+  let db;
+  try {
+    db = openDatabase();
+    ensureSchema(db);
+    clearAttendants(db);
+
+    return res.json({ ok: true });
   } catch (error) {
     return res.status(500).json({
       ok: false,

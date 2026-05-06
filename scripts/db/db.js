@@ -43,6 +43,117 @@ const DEFAULT_ATTENDANTS = [
 
 const DEFAULT_TICKET_GOAL_PCT = 20;
 
+export function listAttendants(db) {
+  return db
+    .prepare(
+      `
+      SELECT
+        id,
+        name,
+        atplus_alias AS atplusAlias,
+        tickets_alias AS ticketsAlias,
+        created_at AS createdAt
+      FROM attendants
+      ORDER BY name COLLATE NOCASE
+    `,
+    )
+    .all();
+}
+
+export function saveAttendant(db, attendant) {
+  const idRaw = attendant?.id;
+  const id =
+    idRaw === null || idRaw === undefined || idRaw === ""
+      ? null
+      : Number.parseInt(String(idRaw), 10);
+  const name = String(attendant?.name || "").trim();
+  const atplusAlias = String(
+    attendant?.atplusAlias ?? attendant?.atplus_alias ?? "",
+  ).trim();
+  const ticketsAlias = String(
+    attendant?.ticketsAlias ?? attendant?.tickets_alias ?? "",
+  ).trim();
+
+  if (!name || !atplusAlias || !ticketsAlias) {
+    throw new Error("Informe nome, apelido AtPlus e apelido Ellevo.");
+  }
+
+  if (Number.isInteger(id)) {
+    db.prepare(
+      `
+      UPDATE attendants
+      SET name = ?, atplus_alias = ?, tickets_alias = ?
+      WHERE id = ?
+    `,
+    ).run(name, atplusAlias, ticketsAlias, id);
+
+    return db
+      .prepare(
+        `
+        SELECT
+          id,
+          name,
+          atplus_alias AS atplusAlias,
+          tickets_alias AS ticketsAlias,
+          created_at AS createdAt
+        FROM attendants
+        WHERE id = ?
+      `,
+      )
+      .get(id);
+  }
+
+  db.prepare(
+    `
+    INSERT INTO attendants (name, atplus_alias, tickets_alias)
+    VALUES (?, ?, ?)
+    ON CONFLICT(name) DO UPDATE SET
+      atplus_alias = excluded.atplus_alias,
+      tickets_alias = excluded.tickets_alias
+  `,
+  ).run(name, atplusAlias, ticketsAlias);
+
+  return db
+    .prepare(
+      `
+      SELECT
+        id,
+        name,
+        atplus_alias AS atplusAlias,
+        tickets_alias AS ticketsAlias,
+        created_at AS createdAt
+      FROM attendants
+      WHERE name = ? COLLATE NOCASE
+    `,
+    )
+    .get(name);
+}
+
+export function clearAttendants(db) {
+  const transaction = db.transaction(() => {
+    db.prepare(
+      `
+      UPDATE users
+      SET attendant_id = NULL,
+          attendant_ramal = NULL,
+          attendant_responsavel = NULL
+      WHERE attendant_id IS NOT NULL
+         OR attendant_ramal IS NOT NULL
+         OR attendant_responsavel IS NOT NULL
+    `,
+    ).run();
+
+    db.prepare("DELETE FROM attendants").run();
+  });
+  transaction();
+}
+
+export function seedDefaultAttendants(db) {
+  DEFAULT_ATTENDANTS.forEach((attendant) => {
+    saveAttendant(db, attendant);
+  });
+}
+
 export function openDatabase(dbPath = DEFAULT_DB_PATH) {
   const resolved = path.resolve(dbPath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
@@ -248,18 +359,6 @@ export function ensureSchema(db) {
       ON CONFLICT(key) DO NOTHING
     `,
   ).run(String(DEFAULT_TICKET_GOAL_PCT));
-
-  const upsertAttendant = db.prepare(`
-    INSERT INTO attendants (name, atplus_alias, tickets_alias)
-    VALUES (@name, @atplus_alias, @tickets_alias)
-    ON CONFLICT(name) DO UPDATE SET
-      atplus_alias = excluded.atplus_alias,
-      tickets_alias = excluded.tickets_alias
-  `);
-
-  DEFAULT_ATTENDANTS.forEach((attendant) => {
-    upsertAttendant.run(attendant);
-  });
 
   db.exec(`
     UPDATE users
