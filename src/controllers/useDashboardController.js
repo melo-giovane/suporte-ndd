@@ -43,6 +43,7 @@ export function useDashboardController({
   const [cons, setCons] = useState([]);
   const [atend, setAtend] = useState([]);
   const [tickets, setTickets] = useState([]);
+  const [chamados, setChamados] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("resumo");
   const [dateFrom, setDateFrom] = useState("");
@@ -73,9 +74,11 @@ export function useDashboardController({
   const [allOwnCons, setAllOwnCons] = useState([]);
   const [allOwnAtend, setAllOwnAtend] = useState([]);
   const [allOwnTickets, setAllOwnTickets] = useState([]);
+  const [allOwnChamados, setAllOwnChamados] = useState([]);
   const [allTeamCons, setAllTeamCons] = useState([]);
   const [allTeamAtend, setAllTeamAtend] = useState([]);
   const [allTeamTickets, setAllTeamTickets] = useState([]);
+  const [allTeamChamados, setAllTeamChamados] = useState([]);
   const restoreRequestIdRef = useRef(0);
   const incrementalFileRef = useRef();
   const reprocessFileRef = useRef();
@@ -154,10 +157,15 @@ export function useDashboardController({
           ...row,
           dateReal: parseApiDate(row.dataAbertura),
         }));
+        const nextChamados = (data.chamados || []).map((row) => ({
+          ...row,
+          dateReal: parseApiDate(row.dateReal),
+        }));
 
         setCons(nextCons);
         setAtend(nextAtend);
         setTickets(nextTickets);
+        setChamados(nextChamados);
         setTeamTotals(data.teamTotals || null);
 
         const parseConsList = (list) =>
@@ -170,13 +178,20 @@ export function useDashboardController({
             ...row,
             dateReal: parseApiDate(row.dataAbertura),
           }));
+        const parseChamadoList = (list) =>
+          (list || []).map((row) => ({
+            ...row,
+            dateReal: parseApiDate(row.dateReal),
+          }));
 
         setAllOwnCons(parseConsList(data.ownCons));
         setAllOwnAtend(parseConsList(data.ownAtend));
         setAllOwnTickets(parseTicketList(data.ownTickets));
+        setAllOwnChamados(parseChamadoList(data.ownChamados));
         setAllTeamCons(parseConsList(data.teamCons));
         setAllTeamAtend(parseConsList(data.teamAtend));
         setAllTeamTickets(parseTicketList(data.teamTickets));
+        setAllTeamChamados(parseChamadoList(data.teamChamados));
         const nextTicketGoalPct = Number(data.ticketGoalPct);
         if (Number.isFinite(nextTicketGoalPct)) {
           setTicketGoalPct(nextTicketGoalPct);
@@ -338,6 +353,11 @@ export function useDashboardController({
     [tickets, dateFrom, dateTo, dayTypeFilter],
   );
 
+  const fChamados = useMemo(
+    () => filterByDateRange(chamados, dateFrom, dateTo, dayTypeFilter),
+    [chamados, dateFrom, dateTo, dayTypeFilter],
+  );
+
   // Dedicated own/team filtered data — always populated regardless of viewScope.
   const fOwnCons = useMemo(
     () => filterByDateRange(allOwnCons, dateFrom, dateTo, dayTypeFilter),
@@ -359,9 +379,17 @@ export function useDashboardController({
     () => filterByDateRange(allOwnTickets, dateFrom, dateTo, dayTypeFilter),
     [allOwnTickets, dateFrom, dateTo, dayTypeFilter],
   );
+  const fOwnChamados = useMemo(
+    () => filterByDateRange(allOwnChamados, dateFrom, dateTo, dayTypeFilter),
+    [allOwnChamados, dateFrom, dateTo, dayTypeFilter],
+  );
   const fTeamTickets = useMemo(
     () => filterByDateRange(allTeamTickets, dateFrom, dateTo, dayTypeFilter),
     [allTeamTickets, dateFrom, dateTo, dayTypeFilter],
+  );
+  const fTeamChamados = useMemo(
+    () => filterByDateRange(allTeamChamados, dateFrom, dateTo, dayTypeFilter),
+    [allTeamChamados, dateFrom, dateTo, dayTypeFilter],
   );
 
   const kpis = useMemo(() => buildKpis(fCons, fTickets), [fCons, fTickets]);
@@ -441,6 +469,7 @@ export function useDashboardController({
   return {
     cons,
     tickets,
+    chamados,
     loaded,
     tab,
     dateFrom,
@@ -459,12 +488,15 @@ export function useDashboardController({
     fCons,
     fAtend,
     fTickets,
+    fChamados,
     fOwnCons,
     fTeamCons,
     fOwnAtend,
     fTeamAtend,
     fOwnTickets,
+    fOwnChamados,
     fTeamTickets,
+    fTeamChamados,
     kpis,
     dateRangeInvalid,
     catData,

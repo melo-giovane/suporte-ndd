@@ -253,6 +253,32 @@ export function ensureSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_ellevo_responsavel
       ON ellevo_tickets (responsavel);
 
+    CREATE TABLE IF NOT EXISTS chamados (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source TEXT NOT NULL, -- 'call' or 'ticket'
+      orig_id TEXT, -- optional id from source table
+      chamado TEXT, -- ticket id when available
+      data_key TEXT,
+      date_real TEXT,
+      hora INTEGER,
+      fila TEXT,
+      ramal TEXT,
+      responsavel TEXT,
+      status TEXT,
+      categoria TEXT,
+      titulo TEXT,
+      descricao TEXT,
+      raw_json TEXT,
+      source_file TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chamados_date_real
+      ON chamados (date_real);
+
+    CREATE INDEX IF NOT EXISTS idx_chamados_responsavel
+      ON chamados (responsavel);
+
     CREATE TABLE IF NOT EXISTS attendants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE,

@@ -394,8 +394,19 @@ export default function ResumoTab({
         </div>
       </Section>
 
-      <Section title="Tickets (derivados das ligações)" icon="🎫">
+      <Section title="Chamados (ligações + tickets)" icon="🎫">
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div
+            onClick={() => onTicketDrilldown?.("chamados")}
+            style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
+          >
+            <KPI
+              icon="📦"
+              label="Chamados"
+              value={kpis.chamados}
+              color={P.purple}
+            />
+          </div>
           <div
             onClick={() => onTicketDrilldown?.("todos")}
             style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}

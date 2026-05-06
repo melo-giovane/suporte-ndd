@@ -2960,8 +2960,7 @@ export default function App() {
           <>
             <Section title="Visão Unificada — Telefone + Tickets" icon="👥">
               <p style={{ fontSize: 12, color: P.dim, margin: "-8px 0 14px" }}>
-                Tickets derivados das ligações. Total tickets ≤ chamadas
-                atendidas.
+                Chamados = ligações atendidas + tickets (contagem separada).
               </p>
               <Table
                 headers={[

@@ -97,6 +97,13 @@ export function importDashboardToSqlite({
       updated_at = datetime('now')
   `);
 
+  const insertChamado = db.prepare(`
+    INSERT INTO chamados (
+      source, orig_id, chamado, data_key, date_real, hora, fila, ramal,
+      responsavel, status, categoria, titulo, descricao, raw_json, source_file
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
   const insertRun = db.prepare(`
     INSERT INTO import_runs (
       source_file, source_file_mtime, reference_year,
@@ -182,6 +189,32 @@ export function importDashboardToSqlite({
         row.tmeSeg,
         resolvedInput,
       );
+      // materialize call as chamado (source='call')
+      try {
+        insertChamado.run(
+          "call",
+          null,
+          null,
+          row.dataKey,
+          row.dateReal,
+          row.hora,
+          row.fila,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          JSON.stringify(row),
+          resolvedInput,
+        );
+      } catch (err) {
+        // best-effort: do not fail the whole import for chamado write errors
+        console.warn(
+          "[import] failed to insert chamado for call row:",
+          err?.message,
+        );
+      }
     });
 
     atendRows.forEach((row) => {
@@ -222,6 +255,31 @@ export function importDashboardToSqlite({
         row.tempoChamadoRaw,
         resolvedInput,
       );
+      // materialize ticket as chamado (source='ticket')
+      try {
+        insertChamado.run(
+          "ticket",
+          null,
+          row.chamado,
+          null,
+          row.dataAbertura,
+          null,
+          null,
+          null,
+          row.responsavel,
+          row.status,
+          row.categoriaNormalizada || row.categoriaRaw,
+          row.titulo,
+          row.descricao,
+          JSON.stringify(row),
+          resolvedInput,
+        );
+      } catch (err) {
+        console.warn(
+          "[import] failed to insert chamado for ticket row:",
+          err?.message,
+        );
+      }
     });
 
     const stat = fs.statSync(resolvedInput);

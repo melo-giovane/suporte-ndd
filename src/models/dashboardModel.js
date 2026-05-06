@@ -394,6 +394,7 @@ export function buildKpis(fCons, fTickets) {
     txAband: tc ? tab / tc : 0,
     txRegistros: ta ? fTickets.length / ta : 0,
     tkt: fTickets.length,
+    chamados: ta + fTickets.length,
     tktF: fTickets.filter((t) => t.status === "Fechado").length,
     tktA: fTickets.filter((t) => t.status === "Aberto").length,
     tktTransf: fTickets.filter(isTransferencia).length,
@@ -439,6 +440,7 @@ export function buildEquipeData(fAtend, fTickets, attendantsCatalog = []) {
         nome: displayName || atplusAlias || ticketsAlias || "Sem nome",
         chamAtend: ca,
         tickets: ft.length,
+        chamados: ca + ft.length,
         tktAbertos: ft.filter((ticket) => ticket.status === "Aberto").length,
         total: ca + ft.length,
         tma: fa.length

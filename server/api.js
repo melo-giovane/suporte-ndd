@@ -178,6 +178,18 @@ function computeTeamTotals(db) {
   const ta = callTotals?.ta || 0;
   const tab = callTotals?.tab || 0;
 
+  const chamadosTotals = db
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN source = 'call' THEN 1 ELSE 0 END) AS calls,
+        SUM(CASE WHEN source = 'ticket' THEN 1 ELSE 0 END) AS tickets
+      FROM chamados
+    `,
+    )
+    .get();
+
   return {
     tc,
     ta,
@@ -192,6 +204,9 @@ function computeTeamTotals(db) {
     tktTransf: ticketTotals?.tktTransf || 0,
     tktErros: ticketTotals?.tktErros || 0,
     dias: callTotals?.dias || 0,
+    chamadosTotal: chamadosTotals?.total || 0,
+    chamadosCalls: chamadosTotals?.calls || 0,
+    chamadosTickets: chamadosTotals?.tickets || 0,
   };
 }
 
@@ -372,15 +387,42 @@ function readDashboardData(db) {
     )
     .all();
 
+  const chamados = db
+    .prepare(
+      `
+      SELECT
+        id,
+        source,
+        orig_id AS origId,
+        chamado,
+        data_key AS dataKey,
+        date_real AS dateReal,
+        hora,
+        fila,
+        ramal,
+        responsavel,
+        status,
+        categoria,
+        titulo,
+        descricao,
+        raw_json AS rawJson
+      FROM chamados
+      ORDER BY date_real
+    `,
+    )
+    .all();
+
   // Masters always see the full team, so expose the same data under the
   // `team*` aliases so the frontend can use a unified shape.
   return {
     cons,
     atend,
     tickets,
+    chamados,
     teamCons: cons,
     teamAtend: atend,
     teamTickets: tickets,
+    teamChamados: chamados,
   };
 }
 
@@ -430,6 +472,31 @@ function readDashboardDataForAttendant(db, user, scope) {
         tempo_chamado_raw AS tempoChamadoRaw
       FROM ellevo_tickets
       ORDER BY data_abertura
+    `,
+    )
+    .all();
+
+  const teamChamados = db
+    .prepare(
+      `
+      SELECT
+        id,
+        source,
+        orig_id AS origId,
+        chamado,
+        data_key AS dataKey,
+        date_real AS dateReal,
+        hora,
+        fila,
+        ramal,
+        responsavel,
+        status,
+        categoria,
+        titulo,
+        descricao,
+        raw_json AS rawJson
+      FROM chamados
+      ORDER BY date_real
     `,
     )
     .all();
@@ -512,6 +579,34 @@ function readDashboardDataForAttendant(db, user, scope) {
         .all(responsavel)
     : [];
 
+  const ownChamados = responsavel
+    ? db
+        .prepare(
+          `
+          SELECT
+            id,
+            source,
+            orig_id AS origId,
+            chamado,
+            data_key AS dataKey,
+            date_real AS dateReal,
+            hora,
+            fila,
+            ramal,
+            responsavel,
+            status,
+            categoria,
+            titulo,
+            descricao,
+            raw_json AS rawJson
+          FROM chamados
+          WHERE responsavel = ?
+          ORDER BY date_real
+        `,
+        )
+        .all(responsavel)
+    : [];
+
   const teamAtend = db
     .prepare(
       `
@@ -536,6 +631,7 @@ function readDashboardDataForAttendant(db, user, scope) {
     cons: scope === "team" ? teamCons : ownCons,
     atend: scope === "team" ? teamAtend : ownAtend,
     tickets: scope === "team" ? teamTickets : ownTickets,
+    chamados: scope === "team" ? teamChamados : ownChamados,
     ownCons,
     ownAtend,
     ownTickets,
