@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   AGENT_MAP,
   fmtSec,
@@ -321,8 +322,28 @@ const TT = ({ active, payload, label }) => {
   );
 };
 
-function ChartCard({ title, children, h = 240 }) {
-  return (
+function ChartCard({ title, children, h = 240, allowExpand = false }) {
+  const [isFull, setIsFull] = useState(false);
+
+  useEffect(() => {
+    // prevent body scroll when fullscreen
+    if (isFull) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isFull]);
+
+  useEffect(() => {
+    if (!isFull) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setIsFull(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFull]);
+
+  const base = (
     <div
       style={{
         background: P.card,
@@ -335,18 +356,122 @@ function ChartCard({ title, children, h = 240 }) {
     >
       <div
         style={{
-          fontSize: 10,
-          fontWeight: 600,
-          color: P.dim,
-          textTransform: "uppercase",
-          letterSpacing: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           marginBottom: 10,
         }}
       >
-        {title}
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            color: P.dim,
+            textTransform: "uppercase",
+            letterSpacing: 1,
+          }}
+        >
+          {title}
+        </div>
+        {allowExpand && (
+          <button
+            onClick={() => setIsFull(true)}
+            title="Expandir"
+            style={{
+              border: "none",
+              background: "transparent",
+              color: P.dim,
+              cursor: "pointer",
+              fontSize: 14,
+            }}
+          >
+            ⤢
+          </button>
+        )}
       </div>
-      <div style={{ height: h }}>{children}</div>
+
+      <div
+        style={{ height: h, cursor: allowExpand ? "pointer" : "default" }}
+        onClick={() => {
+          // clicking the chart area expands when allowed
+          if (allowExpand) setIsFull(true);
+        }}
+      >
+        {!isFull && children}
+      </div>
     </div>
+  );
+
+  if (!isFull) return base;
+
+  // fullscreen overlay
+  const overlay = (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={() => setIsFull(false)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.55)",
+        zIndex: 9999,
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "calc(100% - 32px)",
+          height: "calc(100% - 32px)",
+          background: P.card,
+          borderRadius: 12,
+          border: `1px solid ${P.bdr}`,
+          padding: 12,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 8,
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, color: P.text }}>
+            {title}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setIsFull(false)}
+              title="Fechar"
+              style={{
+                border: "none",
+                background: "transparent",
+                color: P.dim,
+                cursor: "pointer",
+                fontSize: 16,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {base}
+      {createPortal(overlay, document.body)}
+    </>
   );
 }
 

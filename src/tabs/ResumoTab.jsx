@@ -289,6 +289,47 @@ export default function ResumoTab({
       .map(([, value]) => value);
   }, [isAttendant, dailyTicketAgentSel, fOwnTickets, fTeamTickets, fTickets]);
 
+  const dailyChamadosEvolution = useMemo(() => {
+    const byDia = new Map();
+    const order = [];
+
+    const pushOrder = (d) => {
+      if (!d) return;
+      if (!order.includes(d)) order.push(d);
+    };
+
+    dailyCallsEvolution.forEach((c) => {
+      const dia = c.dia;
+      if (!dia) return;
+      pushOrder(dia);
+      if (!byDia.has(dia))
+        byDia.set(dia, { dia, Chamados: 0, Atendidas: 0, Tickets: 0 });
+      const acc = byDia.get(dia);
+      const atend = Number(c.Atendidas || 0);
+      acc.Atendidas += atend;
+      acc.Chamados += atend;
+    });
+
+    dailyTicketEvolution.forEach((t) => {
+      const dia = t.dia;
+      if (!dia) return;
+      pushOrder(dia);
+      if (!byDia.has(dia))
+        byDia.set(dia, { dia, Chamados: 0, Atendidas: 0, Tickets: 0 });
+      const acc = byDia.get(dia);
+      const tickets =
+        Number(t.transferencias || 0) +
+        Number(t.errosApp || 0) +
+        Number(t.outros || 0);
+      acc.Tickets += tickets;
+      acc.Chamados += tickets;
+    });
+
+    if (order.length === 0) return dailyChart ?? [];
+
+    return order.map((d) => byDia.get(d));
+  }, [dailyCallsEvolution, dailyTicketEvolution, dailyChart]);
+
   const METRICS = [
     {
       key: "Atendidas",
@@ -499,9 +540,9 @@ export default function ResumoTab({
                 letterSpacing: 1,
               }}
             >
-              Evolução Diária
+              Evolução Diária · Chamados (ligações + tickets)
             </span>
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <select
                 value={dailyCallsAgentSel}
                 onChange={(e) => setDailyCallsAgentSel(e.target.value)}
@@ -531,52 +572,68 @@ export default function ResumoTab({
                   </>
                 )}
               </select>
-              {METRICS.map(({ key, label, color }) => (
-                <button
-                  key={key}
-                  onClick={() => setMetricSel(key)}
+
+              {isAttendant ? (
+                <select
+                  value={dailyTicketAgentSel}
+                  onChange={(e) => setDailyTicketAgentSel(e.target.value)}
                   style={{
-                    padding: "4px 12px",
-                    border: `1px solid ${metricSel === key ? color : P.bdr}`,
-                    borderRadius: 20,
-                    cursor: "pointer",
-                    background:
-                      metricSel === key ? color + "22" : "transparent",
-                    color: metricSel === key ? color : P.dim,
+                    background: P.cardH,
+                    border: `1px solid ${P.bdr}`,
+                    borderRadius: 8,
+                    color: P.text,
+                    padding: "4px 8px",
                     fontSize: 10,
-                    fontWeight: 600,
-                    transition: "all .15s",
+                    minWidth: 150,
                   }}
                 >
-                  {label}
-                </button>
-              ))}
+                  <option value="__SELF__">{attendantDisplayName}</option>
+                  <option value="__ALL__">Totais da equipe</option>
+                </select>
+              ) : (
+                <select
+                  value={dailyTicketAgentSel}
+                  onChange={(e) => setDailyTicketAgentSel(e.target.value)}
+                  style={{
+                    background: P.cardH,
+                    border: `1px solid ${P.bdr}`,
+                    borderRadius: 8,
+                    color: P.text,
+                    padding: "4px 8px",
+                    fontSize: 10,
+                    minWidth: 150,
+                  }}
+                >
+                  <option value="__ALL__">Equipe toda</option>
+                  {atendenteOptions.map((attendant) => (
+                    <option key={attendant.value} value={attendant.value}>
+                      {attendant.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           <div style={{ height: 240 }}>
             <ResponsiveContainer>
-              <LineChart data={dailyCallsEvolution}>
+              <LineChart data={dailyChamadosEvolution}>
                 <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                 <XAxis
                   dataKey="dia"
                   tick={{ fill: P.dim, fontSize: 9 }}
                   interval={Math.max(
                     0,
-                    Math.floor(dailyCallsEvolution.length / 12),
+                    Math.floor(dailyChamadosEvolution.length / 12),
                   )}
                 />
-                <YAxis
-                  tick={{ fill: P.dim, fontSize: 10 }}
-                  domain={m.pct ? [0, 1] : ["auto", "auto"]}
-                  tickFormatter={m.pct ? (v) => fmtPct(v) : undefined}
-                />
+                <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                 <Tooltip content={<TT />} />
                 <Line
                   type="monotone"
-                  dataKey={m.key}
-                  stroke={m.color}
+                  dataKey="Chamados"
+                  stroke={P.purple}
                   strokeWidth={2}
-                  dot={{ r: 2, fill: m.color }}
+                  dot={{ r: 2, fill: P.purple }}
                   activeDot={{ r: 4 }}
                 />
               </LineChart>
@@ -716,7 +773,7 @@ export default function ResumoTab({
           marginTop: 14,
         }}
       >
-        <ChartCard title="Tickets por Categoria">
+        <ChartCard title="Tickets por Categoria" allowExpand>
           <ResponsiveContainer>
             <PieChart>
               <Pie
@@ -725,8 +782,8 @@ export default function ResumoTab({
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                outerRadius={80}
-                innerRadius={35}
+                outerRadius="80%"
+                innerRadius="40%"
                 paddingAngle={1}
                 label={({ name, value }) => `${name}: ${value}`}
                 style={{ fontSize: 9 }}
