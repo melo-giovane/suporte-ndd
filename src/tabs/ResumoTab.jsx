@@ -15,7 +15,6 @@ import {
   Legend,
 } from "recharts";
 import { pickConsRowsForKpisByDay } from "../models/dashboardModel.js";
-import { isTransferencia, isErroApp } from "../utils.js";
 import {
   AlertCircle,
   AlertTriangle,
@@ -76,47 +75,49 @@ export default function ResumoTab({
   ticketGoalPct = 20,
 }) {
   const series = kpiSeries || {};
-  const defaultCallsSel = isAttendant
+  const defaultAgentSel = isAttendant
     ? isAttendantOwnScope
       ? "__SELF__"
       : "__ALL__"
     : "__ALL__";
-  const [dailyCallsAgentSel, setDailyCallsAgentSel] = useState(defaultCallsSel);
-  const [dailyTicketMetricSel, setDailyTicketMetricSel] =
-    useState("transferencias");
-  const defaultTicketSel = isAttendant
-    ? isAttendantOwnScope
-      ? "__SELF__"
-      : "__ALL__"
-    : "__ALL__";
+  const [dailyAcionamentosAgentSel, setDailyAcionamentosAgentSel] =
+    useState(defaultAgentSel);
+  const [dailyTicketMetricSel, setDailyTicketMetricSel] = useState("__ALL__");
   const [dailyTicketAgentSel, setDailyTicketAgentSel] =
-    useState(defaultTicketSel);
+    useState(defaultAgentSel);
 
   useEffect(() => {
-    setDailyCallsAgentSel(
-      isAttendant ? (isAttendantOwnScope ? "__SELF__" : "__ALL__") : "__ALL__",
-    );
-    setDailyTicketAgentSel(
-      isAttendant ? (isAttendantOwnScope ? "__SELF__" : "__ALL__") : "__ALL__",
-    );
+    const next = isAttendant
+      ? isAttendantOwnScope
+        ? "__SELF__"
+        : "__ALL__"
+      : "__ALL__";
+    setDailyAcionamentosAgentSel(next);
+    setDailyTicketAgentSel(next);
   }, [isAttendant, isAttendantOwnScope]);
 
-  const callsAtendenteOptions = useMemo(
+  const acionamentosAtendenteOptions = useMemo(
     () =>
       attendantsCatalog
-        .map((attendant) => ({
-          value: attendant.atplusAlias || attendant.name,
-          label:
-            attendant.name || attendant.atplusAlias || attendant.ticketsAlias,
-        }))
+        .map((attendant) => {
+          const label =
+            attendant.name || attendant.ticketsAlias || attendant.atplusAlias;
+          const value = attendant.name || attendant.ticketsAlias || attendant.atplusAlias;
+          return {
+            value,
+            label,
+            atplusAlias: attendant.atplusAlias || null,
+            ticketsAlias: attendant.ticketsAlias || null,
+          };
+        })
         .filter((attendant) => Boolean(attendant.value))
         .sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
     [attendantsCatalog],
   );
 
-  const callsAtendenteValues = useMemo(
-    () => callsAtendenteOptions.map((attendant) => attendant.value),
-    [callsAtendenteOptions],
+  const acionamentosAtendenteValues = useMemo(
+    () => acionamentosAtendenteOptions.map((a) => a.value),
+    [acionamentosAtendenteOptions],
   );
 
   const atendenteOptions = useMemo(
@@ -140,12 +141,12 @@ export default function ResumoTab({
   useEffect(() => {
     if (
       !isAttendant &&
-      dailyCallsAgentSel !== "__ALL__" &&
-      !callsAtendenteValues.includes(dailyCallsAgentSel)
+      dailyAcionamentosAgentSel !== "__ALL__" &&
+      !acionamentosAtendenteValues.includes(dailyAcionamentosAgentSel)
     ) {
-      setDailyCallsAgentSel("__ALL__");
+      setDailyAcionamentosAgentSel("__ALL__");
     }
-  }, [callsAtendenteValues, dailyCallsAgentSel, isAttendant]);
+  }, [acionamentosAtendenteValues, dailyAcionamentosAgentSel, isAttendant]);
 
   useEffect(() => {
     if (
@@ -157,135 +158,42 @@ export default function ResumoTab({
     }
   }, [atendenteOptionValues, dailyTicketAgentSel, isAttendant]);
 
-  const dailyCallsEvolution = useMemo(() => {
-    const buildFromConsList = (sourceList, fallback) => {
-      const byDay = new Map();
-      const baseCons = pickConsRowsForKpisByDay(sourceList);
-
-      baseCons.forEach((c) => {
-        const d = c.dateReal;
-        if (!d || Number.isNaN(d.getTime())) return;
-
-        const y = d.getFullYear();
-        const mo = `${d.getMonth() + 1}`.padStart(2, "0");
-        const day = `${d.getDate()}`.padStart(2, "0");
-        const key = `${y}-${mo}-${day}`;
-
-        if (!byDay.has(key)) {
-          byDay.set(key, {
-            dia: `${day}/${mo}`,
-            Total: 0,
-            Atendidas: 0,
-            TMA: 0,
-            TME: 0,
-            _rows: 0,
-          });
-        }
-
-        const acc = byDay.get(key);
-        acc.Total += c.total || 0;
-        acc.Atendidas += c.atendidas || 0;
-        acc.TMA += c.tma || 0;
-        acc.TME += c.tme || 0;
-        acc._rows += 1;
-      });
-
-      const consolidated = Array.from(byDay.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([, value]) => ({
-          dia: value.dia,
-          Total: value.Total,
-          Atendidas: value.Atendidas,
-          TMA: value._rows ? Math.round(value.TMA / value._rows) : 0,
-          TME: value._rows ? Math.round(value.TME / value._rows) : 0,
-          "Tx Atend": value.Total ? value.Atendidas / value.Total : 0,
-        }));
-
-      return consolidated.length > 0 ? consolidated : (fallback ?? []);
-    };
-
-    // Attendant context: __SELF__ = own data, __ALL__ = team totals
+  const ticketSourceForTypeCard = useMemo(() => {
     if (isAttendant) {
-      const source = dailyCallsAgentSel === "__SELF__" ? fOwnCons : fTeamCons;
-      return buildFromConsList(source, dailyChart);
+      return dailyTicketAgentSel === "__SELF__" ? fOwnTickets : fTeamTickets;
     }
+    return dailyTicketAgentSel === "__ALL__"
+      ? fTickets
+      : fTickets.filter((t) => t.responsavel === dailyTicketAgentSel);
+  }, [isAttendant, dailyTicketAgentSel, fOwnTickets, fTeamTickets, fTickets]);
 
-    // Master context: __ALL__ = full team, otherwise filter by ramal from fAtend
-    if (dailyCallsAgentSel === "__ALL__") {
-      return buildFromConsList(fCons, dailyChart);
-    }
-
-    const byDay = new Map();
-    const filteredAtend = fAtend.filter((a) => a.ramal === dailyCallsAgentSel);
-    const baseAtend = pickConsRowsForKpisByDay(filteredAtend);
-
-    baseAtend.forEach((a) => {
-      const d = a.dateReal;
-      if (!d || Number.isNaN(d.getTime())) return;
-
-      const y = d.getFullYear();
-      const mo = `${d.getMonth() + 1}`.padStart(2, "0");
-      const day = `${d.getDate()}`.padStart(2, "0");
-      const key = `${y}-${mo}-${day}`;
-
-      if (!byDay.has(key)) {
-        byDay.set(key, {
-          dia: `${day}/${mo}`,
-          Total: 0,
-          Atendidas: 0,
-          TMA: 0,
-          TME: 0,
-          _rows: 0,
-        });
-      }
-
-      const acc = byDay.get(key);
-      acc.Total += a.tentativas || 0;
-      acc.Atendidas += a.atendidas || 0;
-      acc.TMA += a.tma || 0;
-      acc.TME += a.tme || 0;
-      acc._rows += 1;
+  const qualificacaoOptions = useMemo(() => {
+    const set = new Set();
+    ticketSourceForTypeCard.forEach((t) => {
+      const q = String(t.qualificacao || "").trim();
+      if (q && q !== "-") set.add(q);
     });
+    return [
+      { value: "__ALL__", label: "Todos os tipos" },
+      ...Array.from(set)
+        .sort((a, b) => a.localeCompare(b, "pt-BR"))
+        .map((q) => ({ value: q, label: q })),
+    ];
+  }, [ticketSourceForTypeCard]);
 
-    return Array.from(byDay.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([, value]) => ({
-        dia: value.dia,
-        Total: value.Total,
-        Atendidas: value.Atendidas,
-        TMA: value._rows ? Math.round(value.TMA / value._rows) : 0,
-        TME: value._rows ? Math.round(value.TME / value._rows) : 0,
-        "Tx Atend": value.Total ? value.Atendidas / value.Total : 0,
-      }));
-  }, [
-    isAttendant,
-    dailyCallsAgentSel,
-    fOwnCons,
-    fTeamCons,
-    dailyChart,
-    fAtend,
-    fCons,
-  ]);
+  useEffect(() => {
+    if (
+      dailyTicketMetricSel !== "__ALL__" &&
+      !qualificacaoOptions.some((o) => o.value === dailyTicketMetricSel)
+    ) {
+      setDailyTicketMetricSel("__ALL__");
+    }
+  }, [qualificacaoOptions, dailyTicketMetricSel]);
 
   const dailyTicketEvolution = useMemo(() => {
     const byDay = new Map();
 
-    // Attendant: __SELF__ = own tickets, __ALL__ = team tickets
-    // Master: __ALL__ = all tickets, otherwise filter by responsavel
-    let sourceTickets;
-    if (isAttendant) {
-      sourceTickets =
-        dailyTicketAgentSel === "__SELF__" ? fOwnTickets : fTeamTickets;
-    } else {
-      sourceTickets =
-        dailyTicketAgentSel === "__ALL__"
-          ? fTickets
-          : fTickets.filter((t) => {
-              return t.responsavel === dailyTicketAgentSel;
-            });
-    }
-
-    sourceTickets.forEach((ticket) => {
+    ticketSourceForTypeCard.forEach((ticket) => {
       const d = ticket.dateReal;
       if (!d || Number.isNaN(d.getTime())) return;
 
@@ -295,65 +203,111 @@ export default function ResumoTab({
       const key = `${y}-${mo}-${day}`;
 
       if (!byDay.has(key)) {
-        byDay.set(key, {
-          dia: `${day}/${mo}`,
-          transferencias: 0,
-          errosApp: 0,
-          outros: 0,
-        });
+        byDay.set(key, { dia: `${day}/${mo}`, total: 0 });
       }
 
       const acc = byDay.get(key);
-      if (isTransferencia(ticket)) acc.transferencias += 1;
-      else if (isErroApp(ticket)) acc.errosApp += 1;
-      else acc.outros += 1;
+      acc.total += 1;
+      const q = String(ticket.qualificacao || "").trim();
+      if (q && q !== "-") {
+        acc[q] = (acc[q] || 0) + 1;
+      }
     });
 
     return Array.from(byDay.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([, value]) => value);
-  }, [isAttendant, dailyTicketAgentSel, fOwnTickets, fTeamTickets, fTickets]);
+  }, [ticketSourceForTypeCard]);
 
   const dailyChamadosEvolution = useMemo(() => {
+    const selected =
+      dailyAcionamentosAgentSel !== "__ALL__" &&
+      dailyAcionamentosAgentSel !== "__SELF__"
+        ? acionamentosAtendenteOptions.find(
+            (o) => o.value === dailyAcionamentosAgentSel,
+          )
+        : null;
+    const atplusAlias = selected?.atplusAlias || null;
+    const ticketsAlias = selected?.ticketsAlias || null;
+
+    let callsSource;
+    if (isAttendant) {
+      callsSource =
+        dailyAcionamentosAgentSel === "__SELF__" ? fOwnCons : fTeamCons;
+    } else if (dailyAcionamentosAgentSel === "__ALL__") {
+      callsSource = fCons;
+    } else if (atplusAlias) {
+      callsSource = fAtend.filter((a) => a.ramal === atplusAlias);
+    } else {
+      callsSource = [];
+    }
+
+    let ticketSource;
+    if (isAttendant) {
+      ticketSource =
+        dailyAcionamentosAgentSel === "__SELF__" ? fOwnTickets : fTeamTickets;
+    } else if (dailyAcionamentosAgentSel === "__ALL__") {
+      ticketSource = fTickets;
+    } else if (ticketsAlias) {
+      ticketSource = fTickets.filter((t) => t.responsavel === ticketsAlias);
+    } else {
+      ticketSource = [];
+    }
+
     const byDia = new Map();
     const order = [];
-
-    const pushOrder = (d) => {
-      if (!d) return;
-      if (!order.includes(d)) order.push(d);
+    const ensureDay = (key, dia) => {
+      if (!byDia.has(key)) {
+        byDia.set(key, { dia, Acionamentos: 0, Atendidas: 0, Tickets: 0 });
+        order.push(key);
+      }
+      return byDia.get(key);
     };
 
-    dailyCallsEvolution.forEach((c) => {
-      const dia = c.dia;
-      if (!dia) return;
-      pushOrder(dia);
-      if (!byDia.has(dia))
-        byDia.set(dia, { dia, Chamados: 0, Atendidas: 0, Tickets: 0 });
-      const acc = byDia.get(dia);
-      const atend = Number(c.Atendidas || 0);
+    pickConsRowsForKpisByDay(callsSource).forEach((c) => {
+      const d = c.dateReal;
+      if (!d || Number.isNaN(d.getTime())) return;
+      const y = d.getFullYear();
+      const mo = `${d.getMonth() + 1}`.padStart(2, "0");
+      const day = `${d.getDate()}`.padStart(2, "0");
+      const key = `${y}-${mo}-${day}`;
+      const acc = ensureDay(key, `${day}/${mo}`);
+      const atend = Number(c.atendidas || 0);
       acc.Atendidas += atend;
-      acc.Chamados += atend;
+      acc.Acionamentos += atend;
     });
 
-    dailyTicketEvolution.forEach((t) => {
-      const dia = t.dia;
-      if (!dia) return;
-      pushOrder(dia);
-      if (!byDia.has(dia))
-        byDia.set(dia, { dia, Chamados: 0, Atendidas: 0, Tickets: 0 });
-      const acc = byDia.get(dia);
-      const tickets =
-        Number(t.transferencias || 0) +
-        Number(t.errosApp || 0) +
-        Number(t.outros || 0);
-      acc.Tickets += tickets;
-      acc.Chamados += tickets;
+    ticketSource.forEach((ticket) => {
+      const d = ticket.dateReal;
+      if (!d || Number.isNaN(d.getTime())) return;
+      const y = d.getFullYear();
+      const mo = `${d.getMonth() + 1}`.padStart(2, "0");
+      const day = `${d.getDate()}`.padStart(2, "0");
+      const key = `${y}-${mo}-${day}`;
+      const acc = ensureDay(key, `${day}/${mo}`);
+      acc.Tickets += 1;
+      acc.Acionamentos += 1;
     });
 
     if (order.length === 0) return dailyChart ?? [];
 
-    return order.map((d) => byDia.get(d));
-  }, [dailyCallsEvolution, dailyTicketEvolution, dailyChart]);
+    return order
+      .slice()
+      .sort((a, b) => a.localeCompare(b))
+      .map((k) => byDia.get(k));
+  }, [
+    isAttendant,
+    dailyAcionamentosAgentSel,
+    acionamentosAtendenteOptions,
+    fOwnCons,
+    fTeamCons,
+    fAtend,
+    fCons,
+    fOwnTickets,
+    fTeamTickets,
+    fTickets,
+    dailyChart,
+  ]);
 
   const METRICS = [
     {
@@ -373,18 +327,12 @@ export default function ResumoTab({
   ];
   const m = METRICS.find((x) => x.key === metricSel) || METRICS[0];
 
-  const TICKET_METRICS = [
-    {
-      key: "transferencias",
-      label: "Transferências",
-      color: P.green,
-    },
-    { key: "errosApp", label: "Erros no App", color: P.red },
-    { key: "outros", label: "Outros", color: P.cyan },
-  ];
-  const tm =
-    TICKET_METRICS.find((x) => x.key === dailyTicketMetricSel) ||
-    TICKET_METRICS[0];
+  const ticketLineDataKey =
+    dailyTicketMetricSel === "__ALL__" ? "total" : dailyTicketMetricSel;
+  const ticketLineLabel =
+    dailyTicketMetricSel === "__ALL__"
+      ? "Todos os tipos"
+      : dailyTicketMetricSel;
 
   const ticketGoalRatio = Number(ticketGoalPct) / 100;
   const ticketRegistrationRatio = Number(kpis.txRegistros) || 0;
@@ -467,7 +415,7 @@ export default function ResumoTab({
         </div>
       </Section>
 
-      <Section title="Chamados (ligações + tickets)" icon={<Ico Icon={Ticket} />}>
+      <Section title="Acionamentos (ligações + tickets)" icon={<Ico Icon={Ticket} />}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <div
             onClick={() => onTicketDrilldown?.("chamados")}
@@ -480,7 +428,7 @@ export default function ResumoTab({
           >
             <KPI
               icon={<Ico Icon={Package} />}
-              label="Chamados"
+              label="Acionamentos"
               value={kpis.chamados}
               sub={`${kpis.ta} ligações atendidas + ${kpis.tkt} tickets`}
               color={P.purple}
@@ -576,12 +524,12 @@ export default function ResumoTab({
                 letterSpacing: 1,
               }}
             >
-              Evolução Diária · Chamados (ligações + tickets)
+              Evolução Diária · Acionamentos (ligações + tickets)
             </span>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <select
-                value={dailyCallsAgentSel}
-                onChange={(e) => setDailyCallsAgentSel(e.target.value)}
+                value={dailyAcionamentosAgentSel}
+                onChange={(e) => setDailyAcionamentosAgentSel(e.target.value)}
                 style={{
                   background: P.cardH,
                   border: `1px solid ${P.bdr}`,
@@ -600,7 +548,7 @@ export default function ResumoTab({
                 ) : (
                   <>
                     <option value="__ALL__">Equipe toda</option>
-                    {callsAtendenteOptions.map((attendant) => (
+                    {acionamentosAtendenteOptions.map((attendant) => (
                       <option key={attendant.value} value={attendant.value}>
                         {attendant.label.replace(" - Central", "")}
                       </option>
@@ -608,46 +556,6 @@ export default function ResumoTab({
                   </>
                 )}
               </select>
-
-              {isAttendant ? (
-                <select
-                  value={dailyTicketAgentSel}
-                  onChange={(e) => setDailyTicketAgentSel(e.target.value)}
-                  style={{
-                    background: P.cardH,
-                    border: `1px solid ${P.bdr}`,
-                    borderRadius: 8,
-                    color: P.text,
-                    padding: "4px 8px",
-                    fontSize: 10,
-                    minWidth: 150,
-                  }}
-                >
-                  <option value="__SELF__">{attendantDisplayName}</option>
-                  <option value="__ALL__">Totais da equipe</option>
-                </select>
-              ) : (
-                <select
-                  value={dailyTicketAgentSel}
-                  onChange={(e) => setDailyTicketAgentSel(e.target.value)}
-                  style={{
-                    background: P.cardH,
-                    border: `1px solid ${P.bdr}`,
-                    borderRadius: 8,
-                    color: P.text,
-                    padding: "4px 8px",
-                    fontSize: 10,
-                    minWidth: 150,
-                  }}
-                >
-                  <option value="__ALL__">Equipe toda</option>
-                  {atendenteOptions.map((attendant) => (
-                    <option key={attendant.value} value={attendant.value}>
-                      {attendant.label}
-                    </option>
-                  ))}
-                </select>
-              )}
             </div>
           </div>
           <p
@@ -658,8 +566,8 @@ export default function ResumoTab({
               lineHeight: 1.45,
             }}
           >
-            Volume diário de chamados (ligações atendidas + tickets) no período
-            filtrado. Use o seletor para isolar um atendente.
+            Volume diário de acionamentos (ligações atendidas + tickets) no
+            período filtrado. Use o seletor para isolar um atendente.
           </p>
           <div style={{ height: 240 }}>
             <ResponsiveContainer>
@@ -677,7 +585,7 @@ export default function ResumoTab({
                 <Tooltip content={<TT />} />
                 <Line
                   type="monotone"
-                  dataKey="Chamados"
+                  dataKey="Acionamentos"
                   stroke={P.purple}
                   strokeWidth={2}
                   dot={{ r: 2, fill: P.purple }}
@@ -759,28 +667,25 @@ export default function ResumoTab({
                   ))}
                 </select>
               )}
-              {TICKET_METRICS.map(({ key, label, color }) => (
-                <button
-                  key={key}
-                  onClick={() => setDailyTicketMetricSel(key)}
-                  style={{
-                    padding: "4px 12px",
-                    border: `1px solid ${dailyTicketMetricSel === key ? color : P.bdr}`,
-                    borderRadius: 20,
-                    cursor: "pointer",
-                    background:
-                      dailyTicketMetricSel === key
-                        ? color + "22"
-                        : "transparent",
-                    color: dailyTicketMetricSel === key ? color : P.dim,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    transition: "all .15s",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+              <select
+                value={dailyTicketMetricSel}
+                onChange={(e) => setDailyTicketMetricSel(e.target.value)}
+                style={{
+                  background: P.cardH,
+                  border: `1px solid ${P.bdr}`,
+                  borderRadius: 8,
+                  color: P.text,
+                  padding: "4px 8px",
+                  fontSize: 10,
+                  minWidth: 180,
+                }}
+              >
+                {qualificacaoOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <p
@@ -791,8 +696,8 @@ export default function ResumoTab({
               lineHeight: 1.45,
             }}
           >
-            Tickets abertos por dia, separados pelo tipo selecionado nas
-            pílulas (Transferências, Erros no App ou Outros).
+            Tickets abertos por dia. Use o combo de tipo para filtrar por uma
+            qualificação específica ou ver o total geral.
           </p>
           <div style={{ height: 240 }}>
             <ResponsiveContainer>
@@ -810,11 +715,11 @@ export default function ResumoTab({
                 <Tooltip content={<TT />} />
                 <Line
                   type="monotone"
-                  dataKey={tm.key}
-                  name={tm.label}
-                  stroke={tm.color}
+                  dataKey={ticketLineDataKey}
+                  name={ticketLineLabel}
+                  stroke={P.purple}
                   strokeWidth={2}
-                  dot={{ r: 2, fill: tm.color }}
+                  dot={{ r: 2, fill: P.purple }}
                   activeDot={{ r: 4 }}
                 />
               </LineChart>
@@ -855,7 +760,7 @@ export default function ResumoTab({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Tickets por Severidade">
+        <ChartCard title="Tickets por Nível">
           <ResponsiveContainer>
             <BarChart data={sevData} layout="vertical" barSize={22}>
               <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />

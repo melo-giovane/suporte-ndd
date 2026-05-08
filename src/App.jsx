@@ -3223,7 +3223,7 @@ export default function App() {
           <>
             <Section title="Visão Unificada — Telefone + Tickets" icon={<Ico Icon={Users} />}>
               <p style={{ fontSize: 12, color: P.dim, margin: "-8px 0 14px" }}>
-                Chamados = ligações atendidas + tickets (contagem separada).
+                Acionamentos = ligações atendidas + tickets (contagem separada).
               </p>
               <Table
                 headers={[
@@ -4329,7 +4329,7 @@ export default function App() {
                 <b>Responsável:</b> {selectedTicket.responsavel || "-"}
               </div>
               <div>
-                <b>Severidade:</b> {selectedTicket.severidade || "-"}
+                <b>Nível:</b> {selectedTicket.severidade || "-"}
               </div>
               <div>
                 <b>Categoria:</b> {selectedTicket.categoria || "-"}
@@ -4350,7 +4350,7 @@ export default function App() {
                 <b>Módulo:</b> {selectedTicket.modulo || "-"}
               </div>
               <div>
-                <b>Tempo Chamado:</b> {selectedTicket.tempoChamadoRaw || "-"}
+                <b>Tempo do Acionamento:</b> {selectedTicket.tempoChamadoRaw || "-"}
               </div>
             </div>
 

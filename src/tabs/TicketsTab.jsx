@@ -292,7 +292,7 @@ export default function TicketsTab({
           <input
             value={ticketSearch}
             onChange={(e) => setTicketSearch(e.target.value)}
-            placeholder="Buscar por chamado, título, cliente, descrição ou responsável..."
+            placeholder="Buscar por acionamento, título, cliente, descrição ou responsável..."
             style={{
               flex: "1 1 320px",
               background: P.cardH,
@@ -411,7 +411,7 @@ export default function TicketsTab({
                 clear: () => setTicketQualFilter(""),
               },
               {
-                label: "Severidade",
+                label: "Nível",
                 value: ticketSeverityFilter,
                 clear: () => setTicketSeverityFilter(""),
               },
@@ -609,7 +609,7 @@ export default function TicketsTab({
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="Por Severidade (clique para filtrar)" h={220}>
+        <ChartCard title="Por Nível (clique para filtrar)" h={220}>
           <ResponsiveContainer>
             <BarChart data={sevData} barSize={28}>
               <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
@@ -678,7 +678,7 @@ export default function TicketsTab({
       >
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           <Table
-            headers={["Severidade", "Qtd", "%"]}
+            headers={["Nível", "Qtd", "%"]}
             rows={sevData.map((s) => [
               s.name,
               s.value,
@@ -738,12 +738,12 @@ export default function TicketsTab({
           ) : (
             <Table
               headers={[
-                "Chamado",
+                "Acionamento",
                 "Cliente",
                 "Qualificação",
                 "Status",
                 "Responsável",
-                "Severidade",
+                "Nível",
                 "Categoria",
                 "Aberto em",
               ]}
