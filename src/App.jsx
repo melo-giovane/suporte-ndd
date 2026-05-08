@@ -230,11 +230,13 @@ function KPI({ label, value, sub, color, icon, series, hero = false }) {
       )}
       {sparkData && (
         <div
+          title={`Últimos ${sparkData.length} dias`}
           style={{
             height: hero ? 56 : 34,
             marginTop: hero ? 14 : 10,
             marginLeft: -6,
             marginRight: -6,
+            cursor: "help",
           }}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -268,20 +270,6 @@ function KPI({ label, value, sub, color, icon, series, hero = false }) {
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-      )}
-      {sparkData && (
-        <div
-          style={{
-            fontSize: 9,
-            color: P.dim,
-            marginTop: 4,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-            fontFamily: "'JetBrains Mono','Fira Code',ui-monospace,monospace",
-          }}
-        >
-          últimos {sparkData.length} dias
         </div>
       )}
     </div>
