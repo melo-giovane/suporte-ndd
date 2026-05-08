@@ -17,6 +17,7 @@ import {
 } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
+  aggregateBy,
   filterByDateRange,
   pickConsRowsForKpisByDay,
 } from "./models/dashboardModel.js";
@@ -38,16 +39,26 @@ import {
   Area,
 } from "recharts";
 import {
+  AlertCircle,
   AlertTriangle,
   BarChart3,
+  Bug,
   Calendar,
+  CheckCircle2,
   ClipboardList,
   Clock,
+  Hourglass,
+  Package,
   Phone,
   Plus,
   Receipt,
+  Repeat,
   ShieldCheck,
+  Target,
   Ticket,
+  Timer,
+  TrendingUp,
+  Trophy,
   Users,
 } from "lucide-react";
 
@@ -156,7 +167,7 @@ function parseApiDate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function KPI({ label, value, sub, color, icon, series }) {
+function KPI({ label, value, sub, color, icon, series, hero = false }) {
   const lineColor = color || P.accent;
   const sparkData = useMemo(() => {
     if (!Array.isArray(series) || series.length < 2) return null;
@@ -177,51 +188,65 @@ function KPI({ label, value, sub, color, icon, series }) {
       style={{
         background: P.card,
         borderRadius: 14,
-        padding: "16px 18px",
-        border: `1px solid ${P.bdr}`,
-        flex: "1 1 150px",
-        minWidth: 140,
+        padding: hero ? "20px 22px 18px" : "16px 18px",
+        border: `1px solid ${hero ? `${lineColor}55` : P.bdr}`,
+        flex: hero ? "2 1 320px" : "1 1 150px",
+        minWidth: hero ? 280 : 140,
         transition: "all .2s",
+        boxShadow: hero ? `0 1px 0 ${lineColor}10 inset` : "none",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = lineColor;
         e.currentTarget.style.background = P.cardH;
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = P.bdr;
+        e.currentTarget.style.borderColor = hero ? `${lineColor}55` : P.bdr;
         e.currentTarget.style.background = P.card;
       }}
     >
       <div
         style={{
-          fontSize: 10,
+          fontSize: hero ? 11 : 10,
           color: P.dim,
           textTransform: "uppercase",
-          letterSpacing: 1.5,
-          marginBottom: 4,
+          letterSpacing: hero ? 1.8 : 1.5,
+          marginBottom: hero ? 6 : 4,
           fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
         {icon} {label}
       </div>
       <div
         style={{
-          fontSize: 26,
+          fontSize: hero ? 46 : 26,
           fontWeight: 800,
           color: color || P.text,
-          lineHeight: 1.1,
+          lineHeight: 1.05,
+          letterSpacing: hero ? -1 : -0.2,
+          fontVariantNumeric: "tabular-nums",
         }}
       >
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 11, color: P.muted, marginTop: 3 }}>{sub}</div>
+        <div
+          style={{
+            fontSize: hero ? 12 : 11,
+            color: P.muted,
+            marginTop: hero ? 6 : 3,
+          }}
+        >
+          {sub}
+        </div>
       )}
       {sparkData && (
         <div
           style={{
-            height: 34,
-            marginTop: 10,
+            height: hero ? 56 : 34,
+            marginTop: hero ? 14 : 10,
             marginLeft: -6,
             marginRight: -6,
           }}
@@ -233,7 +258,11 @@ function KPI({ label, value, sub, color, icon, series }) {
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={lineColor} stopOpacity={0.35} />
+                  <stop
+                    offset="0%"
+                    stopColor={lineColor}
+                    stopOpacity={hero ? 0.45 : 0.35}
+                  />
                   <stop
                     offset="100%"
                     stopColor={lineColor}
@@ -245,7 +274,7 @@ function KPI({ label, value, sub, color, icon, series }) {
                 type="monotone"
                 dataKey="v"
                 stroke={lineColor}
-                strokeWidth={1.5}
+                strokeWidth={hero ? 2 : 1.5}
                 fill={`url(#${gradientId})`}
                 isAnimationActive={false}
                 dot={false}
@@ -281,7 +310,85 @@ function Section({ title, icon, children }) {
   );
 }
 
-function Table({ headers, rows, onRowClick, selectedRowIndex }) {
+function Table({
+  headers,
+  rows,
+  onRowClick,
+  selectedRowIndex,
+  sortable = false,
+  getSortValue,
+}) {
+  const [sort, setSort] = useState({ col: null, dir: null });
+
+  const sortedView = useMemo(() => {
+    if (!sortable || sort.col == null || sort.dir == null) {
+      return rows.map((row, ri) => ({ row, originalIndex: ri }));
+    }
+
+    const indexed = rows.map((row, ri) => ({ row, originalIndex: ri }));
+    const extract = (row) => {
+      const cell = row[sort.col];
+      const fromGetter = getSortValue
+        ? getSortValue(cell, sort.col, row)
+        : undefined;
+      const value = fromGetter !== undefined ? fromGetter : cell;
+
+      if (value == null) return { num: null, str: "" };
+      if (typeof value === "number") return { num: value, str: "" };
+      if (value instanceof Date) return { num: value.getTime(), str: "" };
+
+      const str = String(value);
+      const numericMatch = str.match(/-?\d+(?:[.,]\d+)?/);
+      const num = numericMatch
+        ? Number.parseFloat(numericMatch[0].replace(",", "."))
+        : Number.NaN;
+
+      return {
+        num: Number.isFinite(num) ? num : null,
+        str: str.toLowerCase(),
+      };
+    };
+
+    indexed.sort((a, b) => {
+      const va = extract(a.row);
+      const vb = extract(b.row);
+      let cmp;
+      if (va.num != null && vb.num != null) {
+        cmp = va.num - vb.num;
+      } else {
+        cmp = va.str.localeCompare(vb.str, "pt-BR");
+      }
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+
+    return indexed;
+  }, [rows, sort, sortable, getSortValue]);
+
+  const handleHeaderClick = (colIndex) => {
+    if (!sortable) return;
+    setSort((current) => {
+      if (current.col !== colIndex) return { col: colIndex, dir: "asc" };
+      if (current.dir === "asc") return { col: colIndex, dir: "desc" };
+      return { col: null, dir: null };
+    });
+  };
+
+  const sortIndicator = (colIndex) => {
+    if (!sortable || sort.col !== colIndex || !sort.dir) return null;
+    return (
+      <span
+        style={{
+          marginLeft: 4,
+          fontFamily: "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+          color: P.accent,
+          fontSize: 9,
+        }}
+      >
+        {sort.dir === "asc" ? "▲" : "▼"}
+      </span>
+    );
+  };
+
   return (
     <div
       style={{
@@ -298,10 +405,12 @@ function Table({ headers, rows, onRowClick, selectedRowIndex }) {
             {headers.map((h, i) => (
               <th
                 key={i}
+                onClick={() => handleHeaderClick(i)}
                 style={{
                   padding: "10px 10px",
                   textAlign: i === 0 ? "left" : "right",
-                  color: P.dim,
+                  color:
+                    sortable && sort.col === i && sort.dir ? P.accent : P.dim,
                   fontWeight: 600,
                   fontSize: 10,
                   textTransform: "uppercase",
@@ -309,21 +418,24 @@ function Table({ headers, rows, onRowClick, selectedRowIndex }) {
                   background: P.card,
                   borderBottom: `1px solid ${P.bdr}`,
                   whiteSpace: "nowrap",
+                  cursor: sortable ? "pointer" : "default",
+                  userSelect: "none",
                 }}
               >
                 {h}
+                {sortIndicator(i)}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, ri) => (
+          {sortedView.map(({ row, originalIndex }, ri) => (
             <tr
-              key={ri}
-              onClick={() => onRowClick?.(ri, row)}
+              key={originalIndex}
+              onClick={() => onRowClick?.(originalIndex, row)}
               style={{
                 background:
-                  selectedRowIndex === ri
+                  selectedRowIndex === originalIndex
                     ? `${P.accent}22`
                     : ri % 2 === 0
                       ? "transparent"
@@ -666,6 +778,10 @@ function resolveDayGroupFromTicketEntry(entry) {
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
+  const [ticketClientFilter, setTicketClientFilter] = useState("");
+  const [ticketQualFilter, setTicketQualFilter] = useState("");
+  const [ticketSeverityFilter, setTicketSeverityFilter] = useState("");
+  const [ticketSearch, setTicketSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [pendingTicketListScroll, setPendingTicketListScroll] = useState(false);
   const ticketListSectionRef = useRef(null);
@@ -804,6 +920,7 @@ export default function App() {
     natData,
     qualData,
     respData,
+    clienteData,
     equipe,
     dailyChart,
     kpiSeries,
@@ -1287,7 +1404,7 @@ export default function App() {
     return fTickets;
   }, [fTickets, ticketListFilterSel]);
 
-  const visibleTicketsList = useMemo(() => {
+  const baseTicketsForTab = useMemo(() => {
     if (!isAttendant || isAttendantTeamTicketsScope) return filteredTicketsList;
 
     const responsibleName = (authUser?.attendantResponsavel || "")
@@ -1307,6 +1424,116 @@ export default function App() {
     isAttendant,
     isAttendantTeamTicketsScope,
   ]);
+
+  const visibleTicketsList = useMemo(() => {
+    let out = baseTicketsForTab;
+
+    if (ticketClientFilter) {
+      const target = ticketClientFilter.trim().toLowerCase();
+      out = out.filter(
+        (t) => String(t.cliente || "").trim().toLowerCase() === target,
+      );
+    }
+    if (ticketQualFilter) {
+      const target = ticketQualFilter.trim().toLowerCase();
+      out = out.filter(
+        (t) => String(t.qualificacao || "").trim().toLowerCase() === target,
+      );
+    }
+    if (ticketSeverityFilter) {
+      const target = ticketSeverityFilter.trim().toLowerCase();
+      out = out.filter(
+        (t) => String(t.severidade || "").trim().toLowerCase() === target,
+      );
+    }
+    if (ticketSearch) {
+      const target = ticketSearch.trim().toLowerCase();
+      if (target) {
+        out = out.filter((t) =>
+          [t.chamado, t.titulo, t.cliente, t.descricao, t.responsavel].some(
+            (v) => String(v || "").toLowerCase().includes(target),
+          ),
+        );
+      }
+    }
+    return out;
+  }, [
+    baseTicketsForTab,
+    ticketClientFilter,
+    ticketQualFilter,
+    ticketSeverityFilter,
+    ticketSearch,
+  ]);
+
+  const ticketsTabClienteData = useMemo(
+    () =>
+      aggregateBy(visibleTicketsList, (t) => {
+        const c = String(t.cliente || "").trim();
+        return c || null;
+      }),
+    [visibleTicketsList],
+  );
+  const ticketsTabQualData = useMemo(
+    () =>
+      aggregateBy(visibleTicketsList, (t) => {
+        const q = t.qualificacao;
+        return q && q !== "-" ? q : "(sem qualificação)";
+      }),
+    [visibleTicketsList],
+  );
+  const ticketsTabSevData = useMemo(
+    () =>
+      aggregateBy(visibleTicketsList, (t) =>
+        t.severidade && t.severidade !== "-" ? t.severidade : null,
+      ),
+    [visibleTicketsList],
+  );
+  const ticketsTabNatData = useMemo(
+    () => aggregateBy(visibleTicketsList, "natureza"),
+    [visibleTicketsList],
+  );
+  const ticketsTabRespData = useMemo(
+    () =>
+      aggregateBy(
+        visibleTicketsList,
+        (t) => t.responsavel?.split(" ").slice(0, 2).join(" ") || "N/I",
+      ),
+    [visibleTicketsList],
+  );
+
+  const ticketsTabKpis = useMemo(() => {
+    const total = visibleTicketsList.length;
+    const abertos = visibleTicketsList.filter(
+      (t) => t.status === "Aberto",
+    ).length;
+    const uniqueClients = new Set(
+      visibleTicketsList
+        .map((t) => String(t.cliente || "").trim())
+        .filter(Boolean),
+    );
+    const top = ticketsTabClienteData[0] || null;
+    return {
+      total,
+      abertos,
+      uniqueClients: uniqueClients.size,
+      topCliente: top,
+    };
+  }, [visibleTicketsList, ticketsTabClienteData]);
+
+  const hasLocalTicketFilters =
+    Boolean(ticketClientFilter) ||
+    Boolean(ticketQualFilter) ||
+    Boolean(ticketSeverityFilter) ||
+    Boolean(ticketSearch.trim());
+
+  const clearAllTicketFilters = useCallback(() => {
+    setTicketClientFilter("");
+    setTicketQualFilter("");
+    setTicketSeverityFilter("");
+    setTicketSearch("");
+    setTicketListFilterSel("todos");
+    setSelectedTicket(null);
+  }, []);
 
   const hourlyActivity = useMemo(() => {
     const buckets = new Map();
@@ -1704,18 +1931,6 @@ export default function App() {
     }));
   }, []);
 
-  const ticketFilterLabel = useMemo(() => {
-    const labels = {
-      todos: "Todos",
-      abertos: "Abertos",
-      fechados: "Fechados",
-      erros: "Erros/App",
-      transferencias: "Transferências",
-      outros: "Outros",
-    };
-    return labels[ticketListFilterSel] || "Todos";
-  }, [ticketListFilterSel]);
-
   function handleTicketDrilldown(filterKey) {
     setTicketListFilterSel(filterKey || "todos");
     setSelectedTicket(null);
@@ -1765,125 +1980,268 @@ export default function App() {
           fontFamily: "'DM Sans',-apple-system,sans-serif",
         }}
       >
-        <form
-          onSubmit={handleLogin}
+        <div
           style={{
-            width: "min(420px, 100%)",
+            display: "flex",
+            flexWrap: "wrap",
+            width: "min(880px, 100%)",
             background: P.card,
             border: `1px solid ${P.bdr}`,
-            borderRadius: 14,
-            padding: 22,
+            borderRadius: 18,
+            overflow: "hidden",
+            boxShadow:
+              themeMode === "dark"
+                ? "0 24px 64px rgba(0,0,0,0.45)"
+                : "0 12px 40px rgba(0,0,0,0.06)",
           }}
         >
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              color: P.text,
-              fontWeight: 800,
-            }}
-          >
-            Login · Suporte NDD
-          </h1>
-          <p style={{ margin: "8px 0 18px", fontSize: 12, color: P.dim }}>
-            Acesso por perfil: master ou atendente.
-          </p>
-
-          <label
-            style={{
-              display: "block",
-              fontSize: 11,
-              color: P.dim,
-              marginBottom: 6,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: 0.8,
-            }}
-          >
-            Usuário
-          </label>
-          <input
-            value={loginForm.username}
-            onChange={(e) =>
-              setLoginForm((v) => ({ ...v, username: e.target.value }))
-            }
-            style={{
-              width: "100%",
-              background: P.cardH,
-              border: `1px solid ${P.bdr}`,
-              borderRadius: 8,
-              color: P.text,
-              fontSize: 13,
-              padding: "9px 10px",
-              marginBottom: 12,
-            }}
-            required
-          />
-
-          <label
-            style={{
-              display: "block",
-              fontSize: 11,
-              color: P.dim,
-              marginBottom: 6,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: 0.8,
-            }}
-          >
-            Senha
-          </label>
-          <input
-            type="password"
-            value={loginForm.password}
-            onChange={(e) =>
-              setLoginForm((v) => ({ ...v, password: e.target.value }))
-            }
-            style={{
-              width: "100%",
-              background: P.cardH,
-              border: `1px solid ${P.bdr}`,
-              borderRadius: 8,
-              color: P.text,
-              fontSize: 13,
-              padding: "9px 10px",
-            }}
-            required
-          />
-
-          <button
-            type="submit"
-            style={{
-              width: "100%",
-              marginTop: 14,
-              background: P.accent,
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 12px",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Entrar
-          </button>
-
           <div
             style={{
-              marginTop: 10,
-              fontSize: 12,
-              color:
-                loginStatus.state === "error"
-                  ? P.red
-                  : loginStatus.state === "success"
-                    ? P.green
-                    : P.dim,
+              flex: "1 1 340px",
+              minWidth: 280,
+              padding: "36px 32px",
+              background:
+                themeMode === "dark"
+                  ? `linear-gradient(160deg, ${P.cardH} 0%, ${P.card} 100%)`
+                  : `linear-gradient(160deg, ${P.accent}0E 0%, ${P.card} 100%)`,
+              borderRight: `1px solid ${P.bdr}`,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: 24,
+              minHeight: 360,
             }}
           >
-            {loginStatus.message || ""}
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 28,
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    display: "inline-block",
+                    width: 14,
+                    height: 14,
+                    background: P.accent,
+                    borderRadius: 3,
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: P.accent,
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  Suporte NDD
+                </span>
+              </div>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 30,
+                  fontWeight: 800,
+                  color: P.text,
+                  letterSpacing: -0.8,
+                  lineHeight: 1.15,
+                }}
+              >
+                Central de
+                <br />
+                Relacionamentos
+              </h1>
+              <p
+                style={{
+                  marginTop: 14,
+                  marginBottom: 0,
+                  fontSize: 13,
+                  color: P.dim,
+                  lineHeight: 1.6,
+                  maxWidth: 320,
+                }}
+              >
+                Telefonia, tickets e produtividade da equipe em um único
+                painel — atualizado a partir do consolidado diário.
+              </p>
+            </div>
+            <div
+              style={{
+                fontFamily:
+                  "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+                fontSize: 10,
+                color: P.dim,
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+              }}
+            >
+              v3.3.0 · Acesso por perfil
+            </div>
           </div>
-        </form>
+
+          <form
+            onSubmit={handleLogin}
+            style={{
+              flex: "1 1 340px",
+              minWidth: 280,
+              padding: "36px 32px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 0,
+            }}
+          >
+            <div
+              style={{
+                fontFamily:
+                  "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+                fontSize: 10,
+                color: P.dim,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+                marginBottom: 6,
+              }}
+            >
+              Login
+            </div>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 22,
+                fontWeight: 800,
+                color: P.text,
+                letterSpacing: -0.5,
+                marginBottom: 24,
+              }}
+            >
+              Entrar na sua conta
+            </h2>
+
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                color: P.dim,
+                marginBottom: 6,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+              }}
+            >
+              Usuário
+            </label>
+            <input
+              value={loginForm.username}
+              onChange={(e) =>
+                setLoginForm((v) => ({ ...v, username: e.target.value }))
+              }
+              style={{
+                width: "100%",
+                background: P.cardH,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 8,
+                color: P.text,
+                fontSize: 13,
+                padding: "10px 12px",
+                marginBottom: 14,
+                outline: "none",
+                transition: "border-color .15s",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = P.accent;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = P.bdr;
+              }}
+              required
+            />
+
+            <label
+              style={{
+                display: "block",
+                fontSize: 11,
+                color: P.dim,
+                marginBottom: 6,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+              }}
+            >
+              Senha
+            </label>
+            <input
+              type="password"
+              value={loginForm.password}
+              onChange={(e) =>
+                setLoginForm((v) => ({ ...v, password: e.target.value }))
+              }
+              style={{
+                width: "100%",
+                background: P.cardH,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 8,
+                color: P.text,
+                fontSize: 13,
+                padding: "10px 12px",
+                outline: "none",
+                transition: "border-color .15s",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = P.accent;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = P.bdr;
+              }}
+              required
+            />
+
+            <button
+              type="submit"
+              style={{
+                width: "100%",
+                marginTop: 18,
+                background: P.accent,
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                padding: "12px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: 0.3,
+                cursor: "pointer",
+                transition: "filter .15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.filter = "brightness(1.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.filter = "none";
+              }}
+            >
+              Entrar
+            </button>
+
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 12,
+                minHeight: 18,
+                color:
+                  loginStatus.state === "error"
+                    ? P.red
+                    : loginStatus.state === "success"
+                      ? P.green
+                      : P.dim,
+              }}
+            >
+              {loginStatus.message || ""}
+            </div>
+          </form>
+        </div>
       </div>
     );
   }
@@ -2383,7 +2741,7 @@ export default function App() {
                   ? "Desempenho de Atendimentos"
                   : "Ranking de Atendentes"
               }
-              icon="🏆"
+              icon={<Ico Icon={Trophy} />}
             >
               <Table
                 headers={[
@@ -2993,10 +3351,343 @@ export default function App() {
 
         {tab === "tickets" && (
           <>
+            <div
+              style={{
+                background: P.card,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 14,
+                padding: 14,
+                marginBottom: 16,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <input
+                  value={ticketSearch}
+                  onChange={(e) => setTicketSearch(e.target.value)}
+                  placeholder="Buscar por chamado, título, cliente, descrição ou responsável..."
+                  style={{
+                    flex: "1 1 320px",
+                    background: P.cardH,
+                    border: `1px solid ${P.bdr}`,
+                    borderRadius: 8,
+                    color: P.text,
+                    fontSize: 12.5,
+                    padding: "9px 12px",
+                    outline: "none",
+                    transition: "border-color .15s",
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = P.accent;
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = P.bdr;
+                  }}
+                />
+                {(hasLocalTicketFilters || ticketListFilterSel !== "todos") && (
+                  <button
+                    onClick={clearAllTicketFilters}
+                    style={{
+                      padding: "8px 14px",
+                      background: "transparent",
+                      border: `1px solid ${P.bdr}`,
+                      borderRadius: 8,
+                      color: P.dim,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      letterSpacing: 0.4,
+                      textTransform: "uppercase",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = P.text;
+                      e.currentTarget.style.borderColor = P.accent;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = P.dim;
+                      e.currentTarget.style.borderColor = P.bdr;
+                    }}
+                  >
+                    Limpar tudo
+                  </button>
+                )}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  flexWrap: "wrap",
+                }}
+              >
+                {[
+                  { key: "todos", label: "Todos" },
+                  { key: "abertos", label: "Abertos" },
+                  { key: "fechados", label: "Fechados" },
+                  { key: "erros", label: "Erros/App" },
+                  { key: "transferencias", label: "Transferências" },
+                  { key: "outros", label: "Outros" },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      setTicketListFilterSel(opt.key);
+                      setSelectedTicket(null);
+                    }}
+                    style={{
+                      padding: "5px 12px",
+                      border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
+                      borderRadius: 18,
+                      background:
+                        ticketListFilterSel === opt.key
+                          ? `${P.accent}22`
+                          : "transparent",
+                      color:
+                        ticketListFilterSel === opt.key ? P.accent : P.dim,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {hasLocalTicketFilters && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: P.dim,
+                      letterSpacing: 1,
+                      textTransform: "uppercase",
+                      fontFamily:
+                        "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+                    }}
+                  >
+                    Filtros ativos:
+                  </span>
+                  {[
+                    {
+                      label: "Cliente",
+                      value: ticketClientFilter,
+                      clear: () => setTicketClientFilter(""),
+                    },
+                    {
+                      label: "Qualificação",
+                      value: ticketQualFilter,
+                      clear: () => setTicketQualFilter(""),
+                    },
+                    {
+                      label: "Severidade",
+                      value: ticketSeverityFilter,
+                      clear: () => setTicketSeverityFilter(""),
+                    },
+                    ticketSearch.trim()
+                      ? {
+                          label: "Busca",
+                          value: ticketSearch.trim(),
+                          clear: () => setTicketSearch(""),
+                        }
+                      : null,
+                  ]
+                    .filter((chip) => chip && chip.value)
+                    .map((chip) => (
+                      <button
+                        key={chip.label}
+                        onClick={chip.clear}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "4px 10px",
+                          border: `1px solid ${P.accent}`,
+                          background: `${P.accent}1A`,
+                          color: P.accent,
+                          borderRadius: 14,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <span style={{ opacity: 0.7 }}>{chip.label}:</span>
+                        <span>{chip.value}</span>
+                        <span style={{ marginLeft: 2, opacity: 0.7 }}>×</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                marginBottom: 16,
+              }}
+            >
+              <KPI
+                icon={<Ico Icon={Receipt} />}
+                label="Total filtrado"
+                value={ticketsTabKpis.total}
+                color={P.accent}
+              />
+              <KPI
+                icon={<Ico Icon={AlertCircle} />}
+                label="Abertos"
+                value={ticketsTabKpis.abertos}
+                color={ticketsTabKpis.abertos > 5 ? P.red : P.orange}
+              />
+              <KPI
+                icon={<Ico Icon={Users} />}
+                label="Clientes únicos"
+                value={ticketsTabKpis.uniqueClients}
+                color={P.purple}
+              />
+              <div
+                onClick={() => {
+                  if (ticketsTabKpis.topCliente?.name) {
+                    setTicketClientFilter(ticketsTabKpis.topCliente.name);
+                    setSelectedTicket(null);
+                  }
+                }}
+                style={{
+                  cursor: ticketsTabKpis.topCliente ? "pointer" : "default",
+                  flex: "1 1 200px",
+                  minWidth: 180,
+                  display: "flex",
+                }}
+              >
+                <KPI
+                  icon={<Ico Icon={Trophy} />}
+                  label="Top cliente"
+                  value={
+                    ticketsTabKpis.topCliente
+                      ? ticketsTabKpis.topCliente.name
+                      : "—"
+                  }
+                  sub={
+                    ticketsTabKpis.topCliente
+                      ? `${ticketsTabKpis.topCliente.value} ticket${ticketsTabKpis.topCliente.value === 1 ? "" : "s"}`
+                      : "Sem dados"
+                  }
+                  color={P.pink}
+                />
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              <ChartCard title="Por Categoria" h={280}>
+              <ChartCard
+                title="Top Clientes (clique para filtrar)"
+                h={300}
+                allowExpand
+              >
                 <ResponsiveContainer>
-                  <BarChart data={catData} barSize={20}>
+                  <BarChart
+                    data={ticketsTabClienteData.slice(0, 10)}
+                    layout="vertical"
+                    barSize={18}
+                    margin={{ top: 4, right: 16, bottom: 4, left: 4 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke={P.bdr}
+                      horizontal={false}
+                    />
+                    <XAxis type="number" tick={{ fill: P.dim, fontSize: 10 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: P.dim, fontSize: 10 }}
+                      width={160}
+                    />
+                    <Tooltip content={<TT />} />
+                    <Bar
+                      dataKey="value"
+                      fill={P.accent}
+                      radius={[0, 4, 4, 0]}
+                      style={{ cursor: "pointer" }}
+                      onClick={(data) => {
+                        if (!data?.name) return;
+                        setTicketClientFilter(
+                          ticketClientFilter === data.name ? "" : data.name,
+                        );
+                        setSelectedTicket(null);
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+              <ChartCard
+                title="Por Qualificação (clique para filtrar)"
+                h={300}
+                allowExpand
+              >
+                <ResponsiveContainer>
+                  <BarChart
+                    data={ticketsTabQualData.slice(0, 10)}
+                    layout="vertical"
+                    barSize={18}
+                    margin={{ top: 4, right: 16, bottom: 4, left: 4 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke={P.bdr}
+                      horizontal={false}
+                    />
+                    <XAxis type="number" tick={{ fill: P.dim, fontSize: 10 }} />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      tick={{ fill: P.dim, fontSize: 10 }}
+                      width={180}
+                    />
+                    <Tooltip content={<TT />} />
+                    <Bar
+                      dataKey="value"
+                      fill={P.purple}
+                      radius={[0, 4, 4, 0]}
+                      style={{ cursor: "pointer" }}
+                      onClick={(data) => {
+                        if (!data?.name) return;
+                        setTicketQualFilter(
+                          ticketQualFilter === data.name ? "" : data.name,
+                        );
+                        setSelectedTicket(null);
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 14,
+                flexWrap: "wrap",
+                marginTop: 14,
+              }}
+            >
+              <ChartCard title="Por Categoria" h={220}>
+                <ResponsiveContainer>
+                  <BarChart data={ticketsTabQualData.slice(0, 12)} barSize={18}>
                     <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                     <XAxis
                       dataKey="name"
@@ -3008,33 +3699,32 @@ export default function App() {
                     <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                     <Tooltip content={<TT />} />
                     <Bar dataKey="value" fill={P.accent} radius={[4, 4, 0, 0]}>
-                      {catData.map((_, i) => (
+                      {ticketsTabQualData.slice(0, 12).map((_, i) => (
                         <Cell key={i} fill={PIE_C[i % PIE_C.length]} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
-              <ChartCard title="Por Qualificação" h={280}>
+              <ChartCard title="Por Severidade (clique para filtrar)" h={220}>
                 <ResponsiveContainer>
-                  <BarChart
-                    data={qualData.slice(0, 8)}
-                    layout="vertical"
-                    barSize={18}
-                  >
+                  <BarChart data={ticketsTabSevData} barSize={28}>
                     <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                    <XAxis type="number" tick={{ fill: P.dim, fontSize: 10 }} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fill: P.dim, fontSize: 9 }}
-                      width={180}
-                    />
+                    <XAxis dataKey="name" tick={{ fill: P.dim, fontSize: 10 }} />
+                    <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                     <Tooltip content={<TT />} />
                     <Bar
                       dataKey="value"
-                      fill={P.purple}
-                      radius={[0, 4, 4, 0]}
+                      fill={P.orange}
+                      radius={[4, 4, 0, 0]}
+                      style={{ cursor: "pointer" }}
+                      onClick={(data) => {
+                        if (!data?.name) return;
+                        setTicketSeverityFilter(
+                          ticketSeverityFilter === data.name ? "" : data.name,
+                        );
+                        setSelectedTicket(null);
+                      }}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -3048,9 +3738,9 @@ export default function App() {
                 marginTop: 14,
               }}
             >
-              <ChartCard title="Por Natureza" h={200}>
+              <ChartCard title="Por Natureza" h={220}>
                 <ResponsiveContainer>
-                  <BarChart data={natData} barSize={28}>
+                  <BarChart data={ticketsTabNatData} barSize={28}>
                     <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                     <XAxis dataKey="name" tick={{ fill: P.dim, fontSize: 9 }} />
                     <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
@@ -3060,9 +3750,9 @@ export default function App() {
                 </ResponsiveContainer>
               </ChartCard>
               {!isAttendantTeamTicketsScope && (
-                <ChartCard title="Por Responsável" h={200}>
+                <ChartCard title="Por Responsável" h={220}>
                   <ResponsiveContainer>
-                    <BarChart data={respData} barSize={28}>
+                    <BarChart data={ticketsTabRespData} barSize={28}>
                       <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
                       <XAxis
                         dataKey="name"
@@ -3080,80 +3770,47 @@ export default function App() {
                 </ChartCard>
               )}
             </div>
+
             <Section title="Tabelas Detalhadas" icon={<Ico Icon={ClipboardList} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 <Table
                   headers={["Severidade", "Qtd", "%"]}
-                  rows={sevData.map((s) => [
+                  rows={ticketsTabSevData.map((s) => [
                     s.name,
                     s.value,
-                    fmtPct(kpis.tkt ? s.value / kpis.tkt : 0),
+                    fmtPct(
+                      ticketsTabKpis.total ? s.value / ticketsTabKpis.total : 0,
+                    ),
                   ])}
                 />
                 <Table
                   headers={["Natureza", "Qtd", "%"]}
-                  rows={natData.map((n) => [
+                  rows={ticketsTabNatData.map((n) => [
                     n.name,
                     n.value,
-                    fmtPct(kpis.tkt ? n.value / kpis.tkt : 0),
+                    fmtPct(
+                      ticketsTabKpis.total ? n.value / ticketsTabKpis.total : 0,
+                    ),
                   ])}
                 />
                 <Table
                   headers={["Qualificação", "Qtd", "%"]}
-                  rows={qualData.map((q) => [
+                  rows={ticketsTabQualData.map((q) => [
                     q.name,
                     q.value,
-                    fmtPct(kpis.tkt ? q.value / kpis.tkt : 0),
+                    fmtPct(
+                      ticketsTabKpis.total ? q.value / ticketsTabKpis.total : 0,
+                    ),
                   ])}
                 />
               </div>
             </Section>
+
             <div ref={ticketListSectionRef}>
               <Section
-                title={`Lista de Tickets · ${ticketFilterLabel}`}
-                icon="🧾"
+                title={`Lista de Tickets · ${ticketsTabKpis.total} resultado${ticketsTabKpis.total === 1 ? "" : "s"}`}
+                icon={<Ico Icon={Receipt} />}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    marginBottom: 10,
-                  }}
-                >
-                  {[
-                    { key: "todos", label: "Todos" },
-                    { key: "abertos", label: "Abertos" },
-                    { key: "fechados", label: "Fechados" },
-                    { key: "erros", label: "Erros/App" },
-                    { key: "transferencias", label: "Transferências" },
-                    { key: "outros", label: "Outros" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => {
-                        setTicketListFilterSel(opt.key);
-                        setSelectedTicket(null);
-                      }}
-                      style={{
-                        padding: "4px 10px",
-                        border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
-                        borderRadius: 18,
-                        background:
-                          ticketListFilterSel === opt.key
-                            ? `${P.accent}22`
-                            : "transparent",
-                        color:
-                          ticketListFilterSel === opt.key ? P.accent : P.dim,
-                        fontSize: 10,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
                 {attendantNotLinked ? (
                   <div
                     style={{
@@ -3165,38 +3822,61 @@ export default function App() {
                       border: `1px solid ${P.orange}`,
                     }}
                   >
-                    ⚠️ Perfil sem atendente vinculado. Contate o administrador.
+                    Perfil sem atendente vinculado. Contate o administrador.
                   </div>
                 ) : visibleTicketsList.length === 0 ? (
                   <div
                     style={{
                       padding: 18,
                       textAlign: "center",
-                      color: P.green,
+                      color: P.dim,
                       background: P.card,
                       borderRadius: 12,
                       border: `1px solid ${P.bdr}`,
                     }}
                   >
-                    Nenhum ticket para o filtro selecionado.
+                    Nenhum ticket para os filtros selecionados.
                   </div>
                 ) : (
                   <Table
                     headers={[
                       "Chamado",
-                      "Título",
+                      "Cliente",
+                      "Qualificação",
                       "Status",
                       "Responsável",
                       "Severidade",
                       "Categoria",
+                      "Aberto em",
                     ]}
+                    sortable
+                    getSortValue={(cell, ci) => {
+                      if (ci === 7 && typeof cell === "string") {
+                        const m = cell.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                        if (m) {
+                          return new Date(
+                            Number(m[3]),
+                            Number(m[2]) - 1,
+                            Number(m[1]),
+                          ).getTime();
+                        }
+                      }
+                      return undefined;
+                    }}
                     rows={visibleTicketsList.map((t) => [
                       t.chamado || "-",
-                      (t.titulo || "-").slice(0, 45),
+                      (t.cliente || "-").slice(0, 32),
+                      (t.qualificacao && t.qualificacao !== "-"
+                        ? t.qualificacao
+                        : "—"
+                      ).slice(0, 28),
                       t.status || "-",
                       (t.responsavel || "-").split(" ").slice(0, 2).join(" "),
                       t.severidade || "-",
                       t.categoria || "-",
+                      t.dateReal instanceof Date
+                        ? t.dateReal.toLocaleDateString("pt-BR")
+                        : "-",
                     ])}
                     onRowClick={(idx) =>
                       setSelectedTicket(visibleTicketsList[idx])
@@ -3251,7 +3931,7 @@ export default function App() {
                   return (
                     <>
                       <KPI
-                        icon="🧾"
+                        icon={<Ico Icon={Receipt} />}
                         label="Registros / Ligações Atendidas"
                         value={fmtPct(ratio)}
                         sub={`${kpis.tkt} tickets de ${kpis.ta} ligações atendidas`}
@@ -3259,7 +3939,7 @@ export default function App() {
                         series={kpiSeries?.txRegistros}
                       />
                       <KPI
-                        icon="🎯"
+                        icon={<Ico Icon={Target} />}
                         label="Objetivo de Registros"
                         value={fmtPct(Number.isFinite(goal) ? goal : 0)}
                         sub={

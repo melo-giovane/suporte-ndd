@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\geovane.melo\\\\OneDrive - NDD.Tech\\\\Documentos\\\\Projetos\\\\relatorios-suporte\" -Recurse -File -Filter \"*.jsx\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

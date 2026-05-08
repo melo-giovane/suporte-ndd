@@ -432,6 +432,15 @@ export function useDashboardController({
     [fTickets],
   );
 
+  const clienteData = useMemo(
+    () =>
+      aggregateBy(fTickets, (t) => {
+        const c = String(t.cliente || "").trim();
+        return c || null;
+      }),
+    [fTickets],
+  );
+
   const equipe = useMemo(() => {
     // viewScope="own" only happens for attendants in "Meus" mode.
     // Show only entries with data (only the own attendant's row will be non-zero).
@@ -614,6 +623,7 @@ export function useDashboardController({
     natData,
     qualData,
     respData,
+    clienteData,
     equipe,
     dailyChart,
     kpiSeries,
