@@ -5,7 +5,9 @@ import {
   buildEquipeData,
   buildKpis,
   filterByDateRange,
+  pickConsRowsForKpisByDay,
 } from "../models/dashboardModel.js";
+import { isErroApp, isTransferencia } from "../utils.js";
 
 const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
@@ -458,6 +460,114 @@ export function useDashboardController({
 
   const dailyChart = useMemo(() => buildDailyChart(fCons), [fCons]);
 
+  const kpiSeries = useMemo(() => {
+    const dayKey = (date) => {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+      const yyyy = date.getFullYear();
+      const mm = `${date.getMonth() + 1}`.padStart(2, "0");
+      const dd = `${date.getDate()}`.padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const consByDay = new Map();
+    pickConsRowsForKpisByDay(fCons).forEach((row) => {
+      const key = dayKey(row?.dateReal);
+      if (!key) return;
+      if (!consByDay.has(key)) {
+        consByDay.set(key, {
+          total: 0,
+          atendidas: 0,
+          abandonadasNa: 0,
+          tmaSum: 0,
+          tmeSum: 0,
+          rows: 0,
+        });
+      }
+      const acc = consByDay.get(key);
+      acc.total += Number(row.total) || 0;
+      acc.atendidas += Number(row.atendidas) || 0;
+      acc.abandonadasNa +=
+        (Number(row.abandonadas) || 0) + (Number(row.naoAtendidas) || 0);
+      acc.tmaSum += Number(row.tma) || 0;
+      acc.tmeSum += Number(row.tme) || 0;
+      acc.rows += 1;
+    });
+
+    const ticketsByDay = new Map();
+    fTickets.forEach((t) => {
+      const key = dayKey(t?.dateReal);
+      if (!key) return;
+      if (!ticketsByDay.has(key)) {
+        ticketsByDay.set(key, {
+          tkt: 0,
+          tktF: 0,
+          tktA: 0,
+          tktTransf: 0,
+          tktErros: 0,
+        });
+      }
+      const acc = ticketsByDay.get(key);
+      acc.tkt += 1;
+      if (t.status === "Fechado") acc.tktF += 1;
+      if (t.status === "Aberto") acc.tktA += 1;
+      if (isTransferencia(t)) acc.tktTransf += 1;
+      if (isErroApp(t)) acc.tktErros += 1;
+    });
+
+    const allDays = new Set([...consByDay.keys(), ...ticketsByDay.keys()]);
+    const sortedDays = Array.from(allDays).sort();
+    const lastDays = sortedDays.slice(-14);
+
+    const series = {
+      ta: [],
+      tab: [],
+      tma: [],
+      tme: [],
+      txAband: [],
+      tkt: [],
+      tktF: [],
+      tktA: [],
+      tktTransf: [],
+      tktErros: [],
+      chamados: [],
+      txRegistros: [],
+      tc: [],
+    };
+
+    lastDays.forEach((key) => {
+      const c = consByDay.get(key) || {
+        total: 0,
+        atendidas: 0,
+        abandonadasNa: 0,
+        tmaSum: 0,
+        tmeSum: 0,
+        rows: 0,
+      };
+      const t = ticketsByDay.get(key) || {
+        tkt: 0,
+        tktF: 0,
+        tktA: 0,
+        tktTransf: 0,
+        tktErros: 0,
+      };
+      series.ta.push(c.atendidas);
+      series.tc.push(c.total);
+      series.tab.push(c.abandonadasNa);
+      series.tma.push(c.rows ? Math.round(c.tmaSum / c.rows) : 0);
+      series.tme.push(c.rows ? Math.round(c.tmeSum / c.rows) : 0);
+      series.txAband.push(c.total ? c.abandonadasNa / c.total : 0);
+      series.tkt.push(t.tkt);
+      series.tktF.push(t.tktF);
+      series.tktA.push(t.tktA);
+      series.tktTransf.push(t.tktTransf);
+      series.tktErros.push(t.tktErros);
+      series.chamados.push(c.atendidas + t.tkt);
+      series.txRegistros.push(c.atendidas ? t.tkt / c.atendidas : 0);
+    });
+
+    return series;
+  }, [fCons, fTickets]);
+
   useEffect(() => {
     restoreFromDatabaseWithRetry();
 
@@ -506,6 +616,7 @@ export function useDashboardController({
     respData,
     equipe,
     dailyChart,
+    kpiSeries,
     setTab,
     setDateFrom,
     setDateTo,

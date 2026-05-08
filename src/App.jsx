@@ -37,6 +37,27 @@ import {
   AreaChart,
   Area,
 } from "recharts";
+import {
+  AlertTriangle,
+  BarChart3,
+  Calendar,
+  ClipboardList,
+  Clock,
+  Phone,
+  Plus,
+  Receipt,
+  ShieldCheck,
+  Ticket,
+  Users,
+} from "lucide-react";
+
+const Ico = ({ Icon, size = 14, stroke = 2.25 }) => (
+  <Icon
+    size={size}
+    strokeWidth={stroke}
+    style={{ display: "inline-block", verticalAlign: "-2px" }}
+  />
+);
 
 const DARK_THEME = {
   bg: "#0c0e14",
@@ -80,34 +101,22 @@ const LIGHT_THEME = {
 
 const PIE_C_DARK = [
   "#3b82f6",
+  "#8b5cf6",
   "#10b981",
   "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
   "#ec4899",
-  "#6366f1",
-  "#14b8a6",
-  "#f97316",
-  "#a855f7",
-  "#22d3ee",
-  "#fb7185",
+  "#06b6d4",
+  "#64748b",
 ];
 
 const PIE_C_LIGHT = [
   "#5500FF",
-  "#0086D1",
   "#ED008C",
-  "#FF0080",
-  "#74CFD0",
   "#00D4AA",
-  "#00997A",
   "#FFC000",
+  "#0086D1",
   "#E65100",
-  "#FF0000",
-  "#3C3C3C",
   "#888888",
-  "#000000",
 ];
 
 const INITIAL_THEME_MODE =
@@ -147,7 +156,22 @@ function parseApiDate(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function KPI({ label, value, sub, color, icon }) {
+function KPI({ label, value, sub, color, icon, series }) {
+  const lineColor = color || P.accent;
+  const sparkData = useMemo(() => {
+    if (!Array.isArray(series) || series.length < 2) return null;
+    const cleaned = series
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v));
+    if (cleaned.length < 2) return null;
+    if (cleaned.every((v) => v === 0)) return null;
+    return cleaned.map((v, i) => ({ i, v }));
+  }, [series]);
+  const gradientId = useMemo(
+    () => `spark-${Math.random().toString(36).slice(2, 9)}`,
+    [],
+  );
+
   return (
     <div
       style={{
@@ -160,7 +184,7 @@ function KPI({ label, value, sub, color, icon }) {
         transition: "all .2s",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = color || P.accent;
+        e.currentTarget.style.borderColor = lineColor;
         e.currentTarget.style.background = P.cardH;
       }}
       onMouseLeave={(e) => {
@@ -192,6 +216,44 @@ function KPI({ label, value, sub, color, icon }) {
       </div>
       {sub && (
         <div style={{ fontSize: 11, color: P.muted, marginTop: 3 }}>{sub}</div>
+      )}
+      {sparkData && (
+        <div
+          style={{
+            height: 34,
+            marginTop: 10,
+            marginLeft: -6,
+            marginRight: -6,
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={sparkData}
+              margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+            >
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lineColor} stopOpacity={0.35} />
+                  <stop
+                    offset="100%"
+                    stopColor={lineColor}
+                    stopOpacity={0.02}
+                  />
+                </linearGradient>
+              </defs>
+              <Area
+                type="monotone"
+                dataKey="v"
+                stroke={lineColor}
+                strokeWidth={1.5}
+                fill={`url(#${gradientId})`}
+                isAnimationActive={false}
+                dot={false}
+                activeDot={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       )}
     </div>
   );
@@ -359,6 +421,8 @@ function ChartCard({ title, children, h = 240, allowExpand = false }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          paddingBottom: 10,
+          borderBottom: `1px solid ${P.bdr}`,
           marginBottom: 10,
         }}
       >
@@ -368,7 +432,9 @@ function ChartCard({ title, children, h = 240, allowExpand = false }) {
             fontWeight: 600,
             color: P.dim,
             textTransform: "uppercase",
-            letterSpacing: 1,
+            letterSpacing: 1.4,
+            fontFamily:
+              "'JetBrains Mono','Fira Code',ui-monospace,monospace",
           }}
         >
           {title}
@@ -383,6 +449,14 @@ function ChartCard({ title, children, h = 240, allowExpand = false }) {
               color: P.dim,
               cursor: "pointer",
               fontSize: 14,
+              padding: 0,
+              lineHeight: 1,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = P.text;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = P.dim;
             }}
           >
             ⤢
@@ -442,7 +516,17 @@ function ChartCard({ title, children, h = 240, allowExpand = false }) {
             marginBottom: 8,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, color: P.text }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: P.text,
+              textTransform: "uppercase",
+              letterSpacing: 1.4,
+              fontFamily:
+                "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+            }}
+          >
             {title}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -476,25 +560,49 @@ function ChartCard({ title, children, h = 240, allowExpand = false }) {
 }
 
 function TabBtn({ id, icon, label, activeTab, onSelect }) {
+  const isActive = activeTab === id;
   return (
     <button
       onClick={() => onSelect(id)}
+      onMouseEnter={(e) => {
+        if (!isActive) e.currentTarget.style.color = P.text;
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) e.currentTarget.style.color = P.dim;
+      }}
       style={{
-        padding: "9px 16px",
+        position: "relative",
+        padding: "10px 14px 12px",
         border: "none",
-        borderRadius: 8,
+        borderRadius: 0,
         cursor: "pointer",
-        background: activeTab === id ? P.accent : "transparent",
-        color: activeTab === id ? "#fff" : P.dim,
-        fontWeight: activeTab === id ? 700 : 500,
+        background: "transparent",
+        color: isActive ? P.text : P.dim,
+        fontWeight: isActive ? 700 : 500,
         fontSize: 12.5,
-        transition: "all .2s",
+        transition: "color .2s ease",
         display: "flex",
         alignItems: "center",
-        gap: 5,
+        gap: 6,
       }}
     >
       {icon} {label}
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 12,
+          right: 12,
+          bottom: 0,
+          height: 2,
+          background: P.accent,
+          borderRadius: 2,
+          transform: isActive ? "scaleX(1)" : "scaleX(0)",
+          transformOrigin: "center",
+          opacity: isActive ? 1 : 0,
+          transition: "transform .25s ease, opacity .2s ease",
+        }}
+      />
     </button>
   );
 }
@@ -698,6 +806,7 @@ export default function App() {
     respData,
     equipe,
     dailyChart,
+    kpiSeries,
     setTab,
     setDateFrom,
     setDateTo,
@@ -1847,32 +1956,56 @@ export default function App() {
             marginBottom: 16,
           }}
         >
-          <div style={{ flexShrink: 0 }}>
+          <div
+            style={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "baseline",
+              gap: 14,
+              flexWrap: "wrap",
+            }}
+          >
             <h1
               style={{
                 fontSize: 20,
                 fontWeight: 800,
                 margin: 0,
                 letterSpacing: -0.5,
-                color: themeMode === "light" ? P.accent : P.text,
-                background:
-                  themeMode === "dark"
-                    ? `linear-gradient(135deg, ${P.accent}, ${P.purple})`
-                    : "none",
-                WebkitBackgroundClip:
-                  themeMode === "dark" ? "text" : "border-box",
-                WebkitTextFillColor:
-                  themeMode === "dark" ? "transparent" : P.accent,
+                color: P.accent,
+                display: "flex",
+                alignItems: "baseline",
+                gap: 8,
               }}
             >
+              <span
+                aria-hidden
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  background: P.accent,
+                  borderRadius: 2,
+                  transform: "translateY(-2px)",
+                }}
+              />
               Suporte NDD
             </h1>
-            <p style={{ fontSize: 11, color: P.dim, margin: "2px 0 0" }}>
-              {kpis.dias} dias filtrados · {totalDaysCount} dias total ·{" "}
+            <p
+              style={{
+                fontSize: 10.5,
+                color: P.dim,
+                margin: 0,
+                fontFamily:
+                  "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+                letterSpacing: 0.5,
+                textTransform: "uppercase",
+              }}
+            >
+              {kpis.dias} / {totalDaysCount} dias ·{" "}
               {isAttendant && attendantScope === "team"
                 ? kpis.tkt
                 : tickets.length}{" "}
-              tickets
+              tkts
             </p>
           </div>
           <div
@@ -2075,39 +2208,39 @@ export default function App() {
         <div
           style={{
             display: "flex",
-            gap: 3,
-            background: P.card,
-            borderRadius: 10,
-            padding: 3,
+            gap: 0,
+            background: "transparent",
+            borderRadius: 0,
+            padding: 0,
             marginBottom: 18,
-            border: `1px solid ${P.bdr}`,
+            borderBottom: `1px solid ${P.bdr}`,
             flexWrap: "wrap",
           }}
         >
           <TabBtn
             id="resumo"
-            icon="📊"
+            icon={<Ico Icon={BarChart3} />}
             label="Resumo"
             activeTab={tab}
             onSelect={setTab}
           />
           <TabBtn
             id="telefonia"
-            icon="📞"
+            icon={<Ico Icon={Phone} />}
             label="Telefonia"
             activeTab={tab}
             onSelect={setTab}
           />
           <TabBtn
             id="atividade-hora"
-            icon="🕒"
+            icon={<Ico Icon={Clock} />}
             label="Atividade/Hora"
             activeTab={tab}
             onSelect={setTab}
           />
           <TabBtn
             id="tickets"
-            icon="🎫"
+            icon={<Ico Icon={Ticket} />}
             label="Tickets"
             activeTab={tab}
             onSelect={setTab}
@@ -2115,7 +2248,7 @@ export default function App() {
           {isMaster && (
             <TabBtn
               id="equipe"
-              icon="👥"
+              icon={<Ico Icon={Users} />}
               label="Equipe"
               activeTab={tab}
               onSelect={setTab}
@@ -2124,7 +2257,7 @@ export default function App() {
           {isMaster && (
             <TabBtn
               id="atualizacao"
-              icon="➕"
+              icon={<Ico Icon={Plus} />}
               label="Atualização"
               activeTab={tab}
               onSelect={setTab}
@@ -2205,6 +2338,7 @@ export default function App() {
               fmtSec={fmtSec}
               fmtPct={fmtPct}
               kpis={kpis}
+              kpiSeries={kpiSeries}
               metricSel={metricSel}
               setMetricSel={setMetricSel}
               dailyChart={dailyChart}
@@ -2365,7 +2499,7 @@ export default function App() {
                 </ResponsiveContainer>
               </ChartCard>
             </div>
-            <Section title="Detalhamento Diário" icon="📅">
+            <Section title="Detalhamento Diário" icon={<Ico Icon={Calendar} />}>
               <div
                 style={{
                   overflowX: "auto",
@@ -2674,7 +2808,7 @@ export default function App() {
         {tab === "atividade-hora" && (
           <>
             {hourlyActivity.length === 0 ? (
-              <Section title="Atividade por Hora" icon="🕒">
+              <Section title="Atividade por Hora" icon={<Ico Icon={Clock} />}>
                 <div
                   style={{
                     padding: 14,
@@ -2816,7 +2950,7 @@ export default function App() {
                   )}
                 </div>
 
-                <Section title="Detalhamento por Hora" icon="📋">
+                <Section title="Detalhamento por Hora" icon={<Ico Icon={ClipboardList} />}>
                   <Table
                     headers={
                       isAttendant
@@ -2946,7 +3080,7 @@ export default function App() {
                 </ChartCard>
               )}
             </div>
-            <Section title="Tabelas Detalhadas" icon="📋">
+            <Section title="Tabelas Detalhadas" icon={<Ico Icon={ClipboardList} />}>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 <Table
                   headers={["Severidade", "Qtd", "%"]}
@@ -3083,7 +3217,7 @@ export default function App() {
 
         {tab === "equipe" && (
           <>
-            <Section title="Visão Unificada — Telefone + Tickets" icon="👥">
+            <Section title="Visão Unificada — Telefone + Tickets" icon={<Ico Icon={Users} />}>
               <p style={{ fontSize: 12, color: P.dim, margin: "-8px 0 14px" }}>
                 Chamados = ligações atendidas + tickets (contagem separada).
               </p>
@@ -3108,7 +3242,7 @@ export default function App() {
                 ])}
               />
             </Section>
-            <Section title="Registros" icon="🧾">
+            <Section title="Registros" icon={<Ico Icon={Receipt} />}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {(() => {
                   const ratio = Number(kpis.txRegistros) || 0;
@@ -3122,6 +3256,7 @@ export default function App() {
                         value={fmtPct(ratio)}
                         sub={`${kpis.tkt} tickets de ${kpis.ta} ligações atendidas`}
                         color={P.purple}
+                        series={kpiSeries?.txRegistros}
                       />
                       <KPI
                         icon="🎯"
@@ -3308,7 +3443,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <Section title="Alertas" icon="🚨">
+            <Section title="Alertas" icon={<Ico Icon={AlertTriangle} />}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {equipe
                   .filter((e) => e.tktAbertos > 3)
@@ -3367,7 +3502,7 @@ export default function App() {
 
         {tab === "atualizacao" && (
           <>
-            <Section title="Atualização Incremental" icon="➕">
+            <Section title="Atualização Incremental" icon={<Ico Icon={Plus} />}>
               <div
                 style={{
                   background: P.card,
@@ -3553,7 +3688,7 @@ export default function App() {
               </div>
             </Section>
 
-            <Section title="Gestão de Usuários" icon="🔐">
+            <Section title="Gestão de Usuários" icon={<Ico Icon={ShieldCheck} />}>
               <div
                 style={{
                   display: "flex",

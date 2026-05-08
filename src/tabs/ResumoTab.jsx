@@ -16,6 +16,15 @@ import {
 } from "recharts";
 import { pickConsRowsForKpisByDay } from "../models/dashboardModel.js";
 import { isTransferencia, isErroApp } from "../utils.js";
+import { AlertTriangle, Phone, Ticket, Users } from "lucide-react";
+
+const Ico = ({ Icon, size = 14, stroke = 2.25 }) => (
+  <Icon
+    size={size}
+    strokeWidth={stroke}
+    style={{ display: "inline-block", verticalAlign: "-2px" }}
+  />
+);
 
 export default function ResumoTab({
   P,
@@ -27,6 +36,7 @@ export default function ResumoTab({
   fmtSec,
   fmtPct,
   kpis,
+  kpiSeries,
   metricSel,
   setMetricSel,
   dailyChart,
@@ -51,6 +61,7 @@ export default function ResumoTab({
   isMasterView = false,
   ticketGoalPct = 20,
 }) {
+  const series = kpiSeries || {};
   const defaultCallsSel = isAttendant
     ? isAttendantOwnScope
       ? "__SELF__"
@@ -371,7 +382,7 @@ export default function ResumoTab({
 
   return (
     <>
-      <Section title="Telefonia" icon="📞">
+      <Section title="Telefonia" icon={<Ico Icon={Phone} />}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <KPI
             icon="📞"
@@ -379,6 +390,7 @@ export default function ResumoTab({
             value={kpis.ta}
             sub={`${kpis.tc} total`}
             color={P.green}
+            series={series.ta}
           />
           {showRegistrationCards && (
             <>
@@ -388,6 +400,7 @@ export default function ResumoTab({
                 value={fmtPct(ticketRegistrationRatio)}
                 sub={`${kpis.tkt} tickets de ${kpis.ta} ligações atendidas`}
                 color={P.purple}
+                series={series.txRegistros}
               />
               <KPI
                 icon="🎯"
@@ -411,12 +424,14 @@ export default function ResumoTab({
                 label="Tx Aband+Não At."
                 value={fmtPct(kpis.txAband)}
                 color={P.orange}
+                series={series.txAband}
               />
               <KPI
                 icon="⚠️"
                 label="Aband+Não At."
                 value={kpis.tab}
                 color={P.orange}
+                series={series.tab}
               />
             </>
           )}
@@ -425,17 +440,19 @@ export default function ResumoTab({
             label="TMA Médio"
             value={fmtSec(kpis.tma)}
             color={P.orange}
+            series={series.tma}
           />
           <KPI
             icon="⏳"
             label="TME Médio"
             value={fmtSec(kpis.tme)}
             color={P.cyan}
+            series={series.tme}
           />
         </div>
       </Section>
 
-      <Section title="Chamados (ligações + tickets)" icon="🎫">
+      <Section title="Chamados (ligações + tickets)" icon={<Ico Icon={Ticket} />}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <div
             onClick={() => onTicketDrilldown?.("chamados")}
@@ -446,19 +463,32 @@ export default function ResumoTab({
               label="Chamados"
               value={kpis.chamados}
               color={P.purple}
+              series={series.chamados}
             />
           </div>
           <div
             onClick={() => onTicketDrilldown?.("todos")}
             style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
           >
-            <KPI icon="🎫" label="Total" value={kpis.tkt} color={P.purple} />
+            <KPI
+              icon="🎫"
+              label="Total"
+              value={kpis.tkt}
+              color={P.purple}
+              series={series.tkt}
+            />
           </div>
           <div
             onClick={() => onTicketDrilldown?.("fechados")}
             style={{ cursor: "pointer", flex: "1 1 150px", minWidth: 140 }}
           >
-            <KPI icon="🟢" label="Fechados" value={kpis.tktF} color={P.green} />
+            <KPI
+              icon="🟢"
+              label="Fechados"
+              value={kpis.tktF}
+              color={P.green}
+              series={series.tktF}
+            />
           </div>
           <div
             onClick={() => onTicketDrilldown?.("abertos")}
@@ -469,6 +499,7 @@ export default function ResumoTab({
               label="Abertos"
               value={kpis.tktA}
               color={kpis.tktA > 5 ? P.red : P.orange}
+              series={series.tktA}
             />
           </div>
           <KPI icon="📅" label="Dias" value={kpis.dias} color={P.accent} />
@@ -487,6 +518,7 @@ export default function ResumoTab({
               label="Transferências"
               value={kpis.tktTransf}
               color={P.accent}
+              series={series.tktTransf}
             />
           </div>
           <div
@@ -498,6 +530,7 @@ export default function ResumoTab({
               label="Erros/App"
               value={kpis.tktErros}
               color={P.red}
+              series={series.tktErros}
             />
           </div>
         </div>
@@ -815,7 +848,7 @@ export default function ResumoTab({
         </ChartCard>
       </div>
 
-      <Section title="Visão por Atendente" icon="👥">
+      <Section title="Visão por Atendente" icon={<Ico Icon={Users} />}>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           <ChartCard title="Produtividade: Chamadas + Tickets" h={260}>
             <ResponsiveContainer>
@@ -971,7 +1004,7 @@ export default function ResumoTab({
         </div>
       </Section>
 
-      <Section title="Alertas" icon="🚨">
+      <Section title="Alertas" icon={<Ico Icon={AlertTriangle} />}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {equipe
             .filter((e) => e.tktAbertos > 3)
