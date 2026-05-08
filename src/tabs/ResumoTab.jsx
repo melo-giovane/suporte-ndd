@@ -650,6 +650,17 @@ export default function ResumoTab({
               )}
             </div>
           </div>
+          <p
+            style={{
+              fontSize: 11,
+              color: P.muted,
+              margin: "0 0 10px",
+              lineHeight: 1.45,
+            }}
+          >
+            Volume diário de chamados (ligações atendidas + tickets) no período
+            filtrado. Use o seletor para isolar um atendente.
+          </p>
           <div style={{ height: 240 }}>
             <ResponsiveContainer>
               <LineChart data={dailyChamadosEvolution}>
@@ -772,6 +783,17 @@ export default function ResumoTab({
               ))}
             </div>
           </div>
+          <p
+            style={{
+              fontSize: 11,
+              color: P.muted,
+              margin: "0 0 10px",
+              lineHeight: 1.45,
+            }}
+          >
+            Tickets abertos por dia, separados pelo tipo selecionado nas
+            pílulas (Transferências, Erros no App ou Outros).
+          </p>
           <div style={{ height: 240 }}>
             <ResponsiveContainer>
               <LineChart data={dailyTicketEvolution}>

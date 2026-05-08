@@ -270,6 +270,20 @@ function KPI({ label, value, sub, color, icon, series, hero = false }) {
           </ResponsiveContainer>
         </div>
       )}
+      {sparkData && (
+        <div
+          style={{
+            fontSize: 9,
+            color: P.dim,
+            marginTop: 4,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+            fontFamily: "'JetBrains Mono','Fira Code',ui-monospace,monospace",
+          }}
+        >
+          últimos {sparkData.length} dias
+        </div>
+      )}
     </div>
   );
 }
