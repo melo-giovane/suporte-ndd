@@ -8,16 +8,9 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  AGENT_MAP,
-  fmtSec,
-  fmtPct,
-  isErroApp,
-  isTransferencia,
-} from "./utils.js";
+import { AGENT_MAP, fmtSec, fmtPct } from "./utils.js";
 import { useDashboardController } from "./controllers/useDashboardController.js";
 import {
-  aggregateBy,
   filterByDateRange,
   pickConsRowsForKpisByDay,
 } from "./models/dashboardModel.js";
@@ -39,25 +32,17 @@ import {
   Area,
 } from "recharts";
 import {
-  AlertCircle,
   AlertTriangle,
   BarChart3,
-  Bug,
   Calendar,
-  CheckCircle2,
   ClipboardList,
   Clock,
-  Hourglass,
-  Package,
   Phone,
   Plus,
   Receipt,
-  Repeat,
   ShieldCheck,
   Target,
   Ticket,
-  Timer,
-  TrendingUp,
   Trophy,
   Users,
 } from "lucide-react";
@@ -140,6 +125,7 @@ let P = INITIAL_THEME_MODE === "light" ? LIGHT_THEME : DARK_THEME;
 let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
 
 const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
+const TicketsTab = lazy(() => import("./tabs/TicketsTab.jsx"));
 
 const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
@@ -778,10 +764,6 @@ function resolveDayGroupFromTicketEntry(entry) {
 export default function App() {
   const [themeMode, setThemeMode] = useState(INITIAL_THEME_MODE);
   const [ticketListFilterSel, setTicketListFilterSel] = useState("abertos");
-  const [ticketClientFilter, setTicketClientFilter] = useState("");
-  const [ticketQualFilter, setTicketQualFilter] = useState("");
-  const [ticketSeverityFilter, setTicketSeverityFilter] = useState("");
-  const [ticketSearch, setTicketSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [pendingTicketListScroll, setPendingTicketListScroll] = useState(false);
   const ticketListSectionRef = useRef(null);
@@ -1389,151 +1371,6 @@ export default function App() {
     }
   }, [isMaster, setTab, tab]);
 
-  const filteredTicketsList = useMemo(() => {
-    if (ticketListFilterSel === "todos") return fTickets;
-    if (ticketListFilterSel === "abertos")
-      return fTickets.filter((t) => t.status === "Aberto");
-    if (ticketListFilterSel === "fechados")
-      return fTickets.filter((t) => t.status === "Fechado");
-    if (ticketListFilterSel === "erros")
-      return fTickets.filter((t) => isErroApp(t));
-    if (ticketListFilterSel === "transferencias")
-      return fTickets.filter((t) => isTransferencia(t));
-    if (ticketListFilterSel === "outros")
-      return fTickets.filter((t) => !isErroApp(t) && !isTransferencia(t));
-    return fTickets;
-  }, [fTickets, ticketListFilterSel]);
-
-  const baseTicketsForTab = useMemo(() => {
-    if (!isAttendant || isAttendantTeamTicketsScope) return filteredTicketsList;
-
-    const responsibleName = (authUser?.attendantResponsavel || "")
-      .trim()
-      .toLowerCase();
-
-    if (!responsibleName) {
-      return [];
-    }
-
-    return filteredTicketsList.filter(
-      (t) => (t.responsavel || "").trim().toLowerCase() === responsibleName,
-    );
-  }, [
-    authUser?.attendantResponsavel,
-    filteredTicketsList,
-    isAttendant,
-    isAttendantTeamTicketsScope,
-  ]);
-
-  const visibleTicketsList = useMemo(() => {
-    let out = baseTicketsForTab;
-
-    if (ticketClientFilter) {
-      const target = ticketClientFilter.trim().toLowerCase();
-      out = out.filter(
-        (t) => String(t.cliente || "").trim().toLowerCase() === target,
-      );
-    }
-    if (ticketQualFilter) {
-      const target = ticketQualFilter.trim().toLowerCase();
-      out = out.filter(
-        (t) => String(t.qualificacao || "").trim().toLowerCase() === target,
-      );
-    }
-    if (ticketSeverityFilter) {
-      const target = ticketSeverityFilter.trim().toLowerCase();
-      out = out.filter(
-        (t) => String(t.severidade || "").trim().toLowerCase() === target,
-      );
-    }
-    if (ticketSearch) {
-      const target = ticketSearch.trim().toLowerCase();
-      if (target) {
-        out = out.filter((t) =>
-          [t.chamado, t.titulo, t.cliente, t.descricao, t.responsavel].some(
-            (v) => String(v || "").toLowerCase().includes(target),
-          ),
-        );
-      }
-    }
-    return out;
-  }, [
-    baseTicketsForTab,
-    ticketClientFilter,
-    ticketQualFilter,
-    ticketSeverityFilter,
-    ticketSearch,
-  ]);
-
-  const ticketsTabClienteData = useMemo(
-    () =>
-      aggregateBy(visibleTicketsList, (t) => {
-        const c = String(t.cliente || "").trim();
-        return c || null;
-      }),
-    [visibleTicketsList],
-  );
-  const ticketsTabQualData = useMemo(
-    () =>
-      aggregateBy(visibleTicketsList, (t) => {
-        const q = t.qualificacao;
-        return q && q !== "-" ? q : "(sem qualificação)";
-      }),
-    [visibleTicketsList],
-  );
-  const ticketsTabSevData = useMemo(
-    () =>
-      aggregateBy(visibleTicketsList, (t) =>
-        t.severidade && t.severidade !== "-" ? t.severidade : null,
-      ),
-    [visibleTicketsList],
-  );
-  const ticketsTabNatData = useMemo(
-    () => aggregateBy(visibleTicketsList, "natureza"),
-    [visibleTicketsList],
-  );
-  const ticketsTabRespData = useMemo(
-    () =>
-      aggregateBy(
-        visibleTicketsList,
-        (t) => t.responsavel?.split(" ").slice(0, 2).join(" ") || "N/I",
-      ),
-    [visibleTicketsList],
-  );
-
-  const ticketsTabKpis = useMemo(() => {
-    const total = visibleTicketsList.length;
-    const abertos = visibleTicketsList.filter(
-      (t) => t.status === "Aberto",
-    ).length;
-    const uniqueClients = new Set(
-      visibleTicketsList
-        .map((t) => String(t.cliente || "").trim())
-        .filter(Boolean),
-    );
-    const top = ticketsTabClienteData[0] || null;
-    return {
-      total,
-      abertos,
-      uniqueClients: uniqueClients.size,
-      topCliente: top,
-    };
-  }, [visibleTicketsList, ticketsTabClienteData]);
-
-  const hasLocalTicketFilters =
-    Boolean(ticketClientFilter) ||
-    Boolean(ticketQualFilter) ||
-    Boolean(ticketSeverityFilter) ||
-    Boolean(ticketSearch.trim());
-
-  const clearAllTicketFilters = useCallback(() => {
-    setTicketClientFilter("");
-    setTicketQualFilter("");
-    setTicketSeverityFilter("");
-    setTicketSearch("");
-    setTicketListFilterSel("todos");
-    setSelectedTicket(null);
-  }, []);
 
   const hourlyActivity = useMemo(() => {
     const buckets = new Map();
@@ -3350,549 +3187,34 @@ export default function App() {
         )}
 
         {tab === "tickets" && (
-          <>
-            <div
-              style={{
-                background: P.card,
-                border: `1px solid ${P.bdr}`,
-                borderRadius: 14,
-                padding: 14,
-                marginBottom: 16,
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
-              >
-                <input
-                  value={ticketSearch}
-                  onChange={(e) => setTicketSearch(e.target.value)}
-                  placeholder="Buscar por chamado, título, cliente, descrição ou responsável..."
-                  style={{
-                    flex: "1 1 320px",
-                    background: P.cardH,
-                    border: `1px solid ${P.bdr}`,
-                    borderRadius: 8,
-                    color: P.text,
-                    fontSize: 12.5,
-                    padding: "9px 12px",
-                    outline: "none",
-                    transition: "border-color .15s",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = P.accent;
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = P.bdr;
-                  }}
-                />
-                {(hasLocalTicketFilters || ticketListFilterSel !== "todos") && (
-                  <button
-                    onClick={clearAllTicketFilters}
-                    style={{
-                      padding: "8px 14px",
-                      background: "transparent",
-                      border: `1px solid ${P.bdr}`,
-                      borderRadius: 8,
-                      color: P.dim,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      letterSpacing: 0.4,
-                      textTransform: "uppercase",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = P.text;
-                      e.currentTarget.style.borderColor = P.accent;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = P.dim;
-                      e.currentTarget.style.borderColor = P.bdr;
-                    }}
-                  >
-                    Limpar tudo
-                  </button>
-                )}
+          <Suspense
+            fallback={
+              <div style={{ padding: 24, color: P.dim }}>
+                Carregando aba Tickets…
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  flexWrap: "wrap",
-                }}
-              >
-                {[
-                  { key: "todos", label: "Todos" },
-                  { key: "abertos", label: "Abertos" },
-                  { key: "fechados", label: "Fechados" },
-                  { key: "erros", label: "Erros/App" },
-                  { key: "transferencias", label: "Transferências" },
-                  { key: "outros", label: "Outros" },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => {
-                      setTicketListFilterSel(opt.key);
-                      setSelectedTicket(null);
-                    }}
-                    style={{
-                      padding: "5px 12px",
-                      border: `1px solid ${ticketListFilterSel === opt.key ? P.accent : P.bdr}`,
-                      borderRadius: 18,
-                      background:
-                        ticketListFilterSel === opt.key
-                          ? `${P.accent}22`
-                          : "transparent",
-                      color:
-                        ticketListFilterSel === opt.key ? P.accent : P.dim,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {hasLocalTicketFilters && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 10,
-                      color: P.dim,
-                      letterSpacing: 1,
-                      textTransform: "uppercase",
-                      fontFamily:
-                        "'JetBrains Mono','Fira Code',ui-monospace,monospace",
-                    }}
-                  >
-                    Filtros ativos:
-                  </span>
-                  {[
-                    {
-                      label: "Cliente",
-                      value: ticketClientFilter,
-                      clear: () => setTicketClientFilter(""),
-                    },
-                    {
-                      label: "Qualificação",
-                      value: ticketQualFilter,
-                      clear: () => setTicketQualFilter(""),
-                    },
-                    {
-                      label: "Severidade",
-                      value: ticketSeverityFilter,
-                      clear: () => setTicketSeverityFilter(""),
-                    },
-                    ticketSearch.trim()
-                      ? {
-                          label: "Busca",
-                          value: ticketSearch.trim(),
-                          clear: () => setTicketSearch(""),
-                        }
-                      : null,
-                  ]
-                    .filter((chip) => chip && chip.value)
-                    .map((chip) => (
-                      <button
-                        key={chip.label}
-                        onClick={chip.clear}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "4px 10px",
-                          border: `1px solid ${P.accent}`,
-                          background: `${P.accent}1A`,
-                          color: P.accent,
-                          borderRadius: 14,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        <span style={{ opacity: 0.7 }}>{chip.label}:</span>
-                        <span>{chip.value}</span>
-                        <span style={{ marginLeft: 2, opacity: 0.7 }}>×</span>
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-                marginBottom: 16,
-              }}
-            >
-              <KPI
-                icon={<Ico Icon={Receipt} />}
-                label="Total filtrado"
-                value={ticketsTabKpis.total}
-                color={P.accent}
-              />
-              <KPI
-                icon={<Ico Icon={AlertCircle} />}
-                label="Abertos"
-                value={ticketsTabKpis.abertos}
-                color={ticketsTabKpis.abertos > 5 ? P.red : P.orange}
-              />
-              <KPI
-                icon={<Ico Icon={Users} />}
-                label="Clientes únicos"
-                value={ticketsTabKpis.uniqueClients}
-                color={P.purple}
-              />
-              <div
-                onClick={() => {
-                  if (ticketsTabKpis.topCliente?.name) {
-                    setTicketClientFilter(ticketsTabKpis.topCliente.name);
-                    setSelectedTicket(null);
-                  }
-                }}
-                style={{
-                  cursor: ticketsTabKpis.topCliente ? "pointer" : "default",
-                  flex: "1 1 200px",
-                  minWidth: 180,
-                  display: "flex",
-                }}
-              >
-                <KPI
-                  icon={<Ico Icon={Trophy} />}
-                  label="Top cliente"
-                  value={
-                    ticketsTabKpis.topCliente
-                      ? ticketsTabKpis.topCliente.name
-                      : "—"
-                  }
-                  sub={
-                    ticketsTabKpis.topCliente
-                      ? `${ticketsTabKpis.topCliente.value} ticket${ticketsTabKpis.topCliente.value === 1 ? "" : "s"}`
-                      : "Sem dados"
-                  }
-                  color={P.pink}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              <ChartCard
-                title="Top Clientes (clique para filtrar)"
-                h={300}
-                allowExpand
-              >
-                <ResponsiveContainer>
-                  <BarChart
-                    data={ticketsTabClienteData.slice(0, 10)}
-                    layout="vertical"
-                    barSize={18}
-                    margin={{ top: 4, right: 16, bottom: 4, left: 4 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke={P.bdr}
-                      horizontal={false}
-                    />
-                    <XAxis type="number" tick={{ fill: P.dim, fontSize: 10 }} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fill: P.dim, fontSize: 10 }}
-                      width={160}
-                    />
-                    <Tooltip content={<TT />} />
-                    <Bar
-                      dataKey="value"
-                      fill={P.accent}
-                      radius={[0, 4, 4, 0]}
-                      style={{ cursor: "pointer" }}
-                      onClick={(data) => {
-                        if (!data?.name) return;
-                        setTicketClientFilter(
-                          ticketClientFilter === data.name ? "" : data.name,
-                        );
-                        setSelectedTicket(null);
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-              <ChartCard
-                title="Por Qualificação (clique para filtrar)"
-                h={300}
-                allowExpand
-              >
-                <ResponsiveContainer>
-                  <BarChart
-                    data={ticketsTabQualData.slice(0, 10)}
-                    layout="vertical"
-                    barSize={18}
-                    margin={{ top: 4, right: 16, bottom: 4, left: 4 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke={P.bdr}
-                      horizontal={false}
-                    />
-                    <XAxis type="number" tick={{ fill: P.dim, fontSize: 10 }} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      tick={{ fill: P.dim, fontSize: 10 }}
-                      width={180}
-                    />
-                    <Tooltip content={<TT />} />
-                    <Bar
-                      dataKey="value"
-                      fill={P.purple}
-                      radius={[0, 4, 4, 0]}
-                      style={{ cursor: "pointer" }}
-                      onClick={(data) => {
-                        if (!data?.name) return;
-                        setTicketQualFilter(
-                          ticketQualFilter === data.name ? "" : data.name,
-                        );
-                        setSelectedTicket(null);
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 14,
-                flexWrap: "wrap",
-                marginTop: 14,
-              }}
-            >
-              <ChartCard title="Por Categoria" h={220}>
-                <ResponsiveContainer>
-                  <BarChart data={ticketsTabQualData.slice(0, 12)} barSize={18}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fill: P.dim, fontSize: 9 }}
-                      angle={-35}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                    <Tooltip content={<TT />} />
-                    <Bar dataKey="value" fill={P.accent} radius={[4, 4, 0, 0]}>
-                      {ticketsTabQualData.slice(0, 12).map((_, i) => (
-                        <Cell key={i} fill={PIE_C[i % PIE_C.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-              <ChartCard title="Por Severidade (clique para filtrar)" h={220}>
-                <ResponsiveContainer>
-                  <BarChart data={ticketsTabSevData} barSize={28}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                    <XAxis dataKey="name" tick={{ fill: P.dim, fontSize: 10 }} />
-                    <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                    <Tooltip content={<TT />} />
-                    <Bar
-                      dataKey="value"
-                      fill={P.orange}
-                      radius={[4, 4, 0, 0]}
-                      style={{ cursor: "pointer" }}
-                      onClick={(data) => {
-                        if (!data?.name) return;
-                        setTicketSeverityFilter(
-                          ticketSeverityFilter === data.name ? "" : data.name,
-                        );
-                        setSelectedTicket(null);
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 14,
-                flexWrap: "wrap",
-                marginTop: 14,
-              }}
-            >
-              <ChartCard title="Por Natureza" h={220}>
-                <ResponsiveContainer>
-                  <BarChart data={ticketsTabNatData} barSize={28}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                    <XAxis dataKey="name" tick={{ fill: P.dim, fontSize: 9 }} />
-                    <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                    <Tooltip content={<TT />} />
-                    <Bar dataKey="value" fill={P.cyan} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-              {!isAttendantTeamTicketsScope && (
-                <ChartCard title="Por Responsável" h={220}>
-                  <ResponsiveContainer>
-                    <BarChart data={ticketsTabRespData} barSize={28}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fill: P.dim, fontSize: 9 }}
-                      />
-                      <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                      <Tooltip content={<TT />} />
-                      <Bar
-                        dataKey="value"
-                        fill={P.pink}
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
-              )}
-            </div>
-
-            <Section title="Tabelas Detalhadas" icon={<Ico Icon={ClipboardList} />}>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                <Table
-                  headers={["Severidade", "Qtd", "%"]}
-                  rows={ticketsTabSevData.map((s) => [
-                    s.name,
-                    s.value,
-                    fmtPct(
-                      ticketsTabKpis.total ? s.value / ticketsTabKpis.total : 0,
-                    ),
-                  ])}
-                />
-                <Table
-                  headers={["Natureza", "Qtd", "%"]}
-                  rows={ticketsTabNatData.map((n) => [
-                    n.name,
-                    n.value,
-                    fmtPct(
-                      ticketsTabKpis.total ? n.value / ticketsTabKpis.total : 0,
-                    ),
-                  ])}
-                />
-                <Table
-                  headers={["Qualificação", "Qtd", "%"]}
-                  rows={ticketsTabQualData.map((q) => [
-                    q.name,
-                    q.value,
-                    fmtPct(
-                      ticketsTabKpis.total ? q.value / ticketsTabKpis.total : 0,
-                    ),
-                  ])}
-                />
-              </div>
-            </Section>
-
-            <div ref={ticketListSectionRef}>
-              <Section
-                title={`Lista de Tickets · ${ticketsTabKpis.total} resultado${ticketsTabKpis.total === 1 ? "" : "s"}`}
-                icon={<Ico Icon={Receipt} />}
-              >
-                {attendantNotLinked ? (
-                  <div
-                    style={{
-                      padding: 18,
-                      textAlign: "center",
-                      color: P.orange,
-                      background: P.card,
-                      borderRadius: 12,
-                      border: `1px solid ${P.orange}`,
-                    }}
-                  >
-                    Perfil sem atendente vinculado. Contate o administrador.
-                  </div>
-                ) : visibleTicketsList.length === 0 ? (
-                  <div
-                    style={{
-                      padding: 18,
-                      textAlign: "center",
-                      color: P.dim,
-                      background: P.card,
-                      borderRadius: 12,
-                      border: `1px solid ${P.bdr}`,
-                    }}
-                  >
-                    Nenhum ticket para os filtros selecionados.
-                  </div>
-                ) : (
-                  <Table
-                    headers={[
-                      "Chamado",
-                      "Cliente",
-                      "Qualificação",
-                      "Status",
-                      "Responsável",
-                      "Severidade",
-                      "Categoria",
-                      "Aberto em",
-                    ]}
-                    sortable
-                    getSortValue={(cell, ci) => {
-                      if (ci === 7 && typeof cell === "string") {
-                        const m = cell.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                        if (m) {
-                          return new Date(
-                            Number(m[3]),
-                            Number(m[2]) - 1,
-                            Number(m[1]),
-                          ).getTime();
-                        }
-                      }
-                      return undefined;
-                    }}
-                    rows={visibleTicketsList.map((t) => [
-                      t.chamado || "-",
-                      (t.cliente || "-").slice(0, 32),
-                      (t.qualificacao && t.qualificacao !== "-"
-                        ? t.qualificacao
-                        : "—"
-                      ).slice(0, 28),
-                      t.status || "-",
-                      (t.responsavel || "-").split(" ").slice(0, 2).join(" "),
-                      t.severidade || "-",
-                      t.categoria || "-",
-                      t.dateReal instanceof Date
-                        ? t.dateReal.toLocaleDateString("pt-BR")
-                        : "-",
-                    ])}
-                    onRowClick={(idx) =>
-                      setSelectedTicket(visibleTicketsList[idx])
-                    }
-                    selectedRowIndex={
-                      selectedTicket
-                        ? visibleTicketsList.findIndex(
-                            (t) => t.chamado === selectedTicket.chamado,
-                          )
-                        : -1
-                    }
-                  />
-                )}
-              </Section>
-            </div>
-          </>
+            }
+          >
+            <TicketsTab
+              P={P}
+              PIE_C={PIE_C}
+              KPI={KPI}
+              ChartCard={ChartCard}
+              Section={Section}
+              Table={Table}
+              TT={TT}
+              fmtPct={fmtPct}
+              fTickets={fTickets}
+              isAttendant={isAttendant}
+              isAttendantTeamTicketsScope={isAttendantTeamTicketsScope}
+              attendantNotLinked={attendantNotLinked}
+              authUser={authUser}
+              ticketListFilterSel={ticketListFilterSel}
+              setTicketListFilterSel={setTicketListFilterSel}
+              selectedTicket={selectedTicket}
+              setSelectedTicket={setSelectedTicket}
+              ticketListSectionRef={ticketListSectionRef}
+            />
+          </Suspense>
         )}
 
         {tab === "equipe" && (

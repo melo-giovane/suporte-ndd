@@ -585,6 +585,45 @@ export function useDashboardController({
     };
   }, [restoreFromDatabaseWithRetry]);
 
+  const defaultDateRangeAppliedRef = useRef(false);
+  useEffect(() => {
+    if (defaultDateRangeAppliedRef.current) return;
+    if (!loaded) return;
+    if (dateFrom !== "" || dateTo !== "") {
+      defaultDateRangeAppliedRef.current = true;
+      return;
+    }
+
+    let maxTs = -Infinity;
+    const collectMax = (list) => {
+      list?.forEach((row) => {
+        const d = row?.dateReal;
+        if (d instanceof Date && !Number.isNaN(d.getTime())) {
+          const ts = d.getTime();
+          if (ts > maxTs) maxTs = ts;
+        }
+      });
+    };
+    collectMax(cons);
+    collectMax(tickets);
+    if (!Number.isFinite(maxTs)) return;
+
+    const maxDate = new Date(maxTs);
+    const fromDate = new Date(maxDate);
+    fromDate.setDate(fromDate.getDate() - 30);
+
+    const toIso = (d) => {
+      const yyyy = d.getFullYear();
+      const mm = `${d.getMonth() + 1}`.padStart(2, "0");
+      const dd = `${d.getDate()}`.padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    setDateFrom(toIso(fromDate));
+    setDateTo(toIso(maxDate));
+    defaultDateRangeAppliedRef.current = true;
+  }, [cons, tickets, loaded, dateFrom, dateTo]);
+
   return {
     cons,
     tickets,
