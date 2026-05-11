@@ -13,6 +13,7 @@ import {
   Line,
   CartesianGrid,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import { pickConsRowsForKpisByDay } from "../models/dashboardModel.js";
 import {
@@ -334,6 +335,32 @@ export default function ResumoTab({
       ? "Todos os tipos"
       : dailyTicketMetricSel;
 
+  const computeStats = (values) => {
+    const valid = values.filter((v) => Number.isFinite(v));
+    if (valid.length === 0) return null;
+    const mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+    const variance =
+      valid.reduce((a, b) => a + (b - mean) ** 2, 0) / valid.length;
+    const sd = Math.sqrt(variance);
+    return { mean, upper: mean + sd, lower: mean - sd };
+  };
+
+  const acionamentosStats = useMemo(
+    () =>
+      computeStats(
+        dailyChamadosEvolution.map((d) => Number(d?.Acionamentos || 0)),
+      ),
+    [dailyChamadosEvolution],
+  );
+
+  const ticketStats = useMemo(
+    () =>
+      computeStats(
+        dailyTicketEvolution.map((d) => Number(d?.[ticketLineDataKey] || 0)),
+      ),
+    [dailyTicketEvolution, ticketLineDataKey],
+  );
+
   const ticketGoalRatio = Number(ticketGoalPct) / 100;
   const ticketRegistrationRatio = Number(kpis.txRegistros) || 0;
   const isTicketGoalReached =
@@ -591,6 +618,46 @@ export default function ResumoTab({
                   dot={{ r: 2, fill: P.purple }}
                   activeDot={{ r: 4 }}
                 />
+                {acionamentosStats && (
+                  <>
+                    <ReferenceLine
+                      y={acionamentosStats.mean}
+                      stroke={P.cyan}
+                      strokeDasharray="4 4"
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `Média ${acionamentosStats.mean.toFixed(1)}`,
+                        fill: P.cyan,
+                        fontSize: 9,
+                        position: "insideTopRight",
+                      }}
+                    />
+                    <ReferenceLine
+                      y={acionamentosStats.upper}
+                      stroke={P.dim}
+                      strokeDasharray="2 4"
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `+1σ ${acionamentosStats.upper.toFixed(1)}`,
+                        fill: P.dim,
+                        fontSize: 9,
+                        position: "insideTopRight",
+                      }}
+                    />
+                    <ReferenceLine
+                      y={acionamentosStats.lower}
+                      stroke={P.dim}
+                      strokeDasharray="2 4"
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `-1σ ${acionamentosStats.lower.toFixed(1)}`,
+                        fill: P.dim,
+                        fontSize: 9,
+                        position: "insideBottomRight",
+                      }}
+                    />
+                  </>
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -722,6 +789,46 @@ export default function ResumoTab({
                   dot={{ r: 2, fill: P.purple }}
                   activeDot={{ r: 4 }}
                 />
+                {ticketStats && (
+                  <>
+                    <ReferenceLine
+                      y={ticketStats.mean}
+                      stroke={P.cyan}
+                      strokeDasharray="4 4"
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `Média ${ticketStats.mean.toFixed(1)}`,
+                        fill: P.cyan,
+                        fontSize: 9,
+                        position: "insideTopRight",
+                      }}
+                    />
+                    <ReferenceLine
+                      y={ticketStats.upper}
+                      stroke={P.dim}
+                      strokeDasharray="2 4"
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `+1σ ${ticketStats.upper.toFixed(1)}`,
+                        fill: P.dim,
+                        fontSize: 9,
+                        position: "insideTopRight",
+                      }}
+                    />
+                    <ReferenceLine
+                      y={ticketStats.lower}
+                      stroke={P.dim}
+                      strokeDasharray="2 4"
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `-1σ ${ticketStats.lower.toFixed(1)}`,
+                        fill: P.dim,
+                        fontSize: 9,
+                        position: "insideBottomRight",
+                      }}
+                    />
+                  </>
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
