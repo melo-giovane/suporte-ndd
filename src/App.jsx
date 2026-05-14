@@ -470,16 +470,20 @@ const TT = ({ active, payload, label }) => {
       <div style={{ fontWeight: 700, marginBottom: 4, color: P.text }}>
         {label}
       </div>
-      {payload.map((p, i) => (
-        <div key={i} style={{ color: p.color, marginTop: 2 }}>
-          {p.name}:{" "}
-          <b>
-            {typeof p.value === "number" && p.value < 1 && p.value > 0
-              ? fmtPct(p.value)
-              : p.value}
-          </b>
-        </div>
-      ))}
+      {payload.map((p, i) => {
+        const key = String(p.dataKey ?? "");
+        const isRate = /^(tx|taxa|ratio|pct|percent)/i.test(key);
+        return (
+          <div key={i} style={{ color: p.color, marginTop: 2 }}>
+            {p.name}:{" "}
+            <b>
+              {isRate && typeof p.value === "number"
+                ? fmtPct(p.value)
+                : p.value}
+            </b>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -1376,11 +1380,17 @@ export default function App() {
 
   const hourlyActivity = useMemo(() => {
     const buckets = new Map();
+    let minDayKey = null;
+    let maxDayKey = null;
 
     fCons.forEach((row) => {
       const hour = resolveHourFromConsEntry(row);
       if (hour === null) return;
       const dayKey = resolveDayGroupFromConsEntry(row)?.key;
+      if (dayKey && /^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
+        if (!minDayKey || dayKey < minDayKey) minDayKey = dayKey;
+        if (!maxDayKey || dayKey > maxDayKey) maxDayKey = dayKey;
+      }
 
       const current = buckets.get(hour) || {
         hora: hour,
@@ -1389,7 +1399,6 @@ export default function App() {
         naoAtendidas: 0,
         abandonadas: 0,
         registros: 0,
-        dayKeys: new Set(),
       };
 
       current.total += Number(row.total) || 0;
@@ -1397,21 +1406,28 @@ export default function App() {
       current.naoAtendidas += Number(row.naoAtendidas) || 0;
       current.abandonadas += Number(row.abandonadas) || 0;
       current.registros += 1;
-      if (dayKey) {
-        current.dayKeys.add(dayKey);
-      }
 
       buckets.set(hour, current);
     });
 
+    const startKey = dateFrom || minDayKey;
+    const endKey = dateTo || maxDayKey;
+    let daysCount = 0;
+    if (startKey && endKey) {
+      const start = new Date(`${startKey}T00:00:00`);
+      const end = new Date(`${endKey}T00:00:00`);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        const diff = Math.round((end - start) / 86400000) + 1;
+        daysCount = diff > 0 ? diff : 0;
+      }
+    }
+
     return Array.from(buckets.values())
       .sort((a, b) => a.hora - b.hora)
       .map((row) => {
-        const { dayKeys, ...baseRow } = row;
-        const daysCount = dayKeys.size || row.registros || 0;
         const indisponiveis = row.naoAtendidas + row.abandonadas;
         return {
-          ...baseRow,
+          ...row,
           horaLabel: `${String(row.hora).padStart(2, "0")}:00`,
           indisponiveis,
           daysCount,
@@ -1425,7 +1441,7 @@ export default function App() {
           txAbandono: row.total ? indisponiveis / row.total : 0,
         };
       });
-  }, [fCons]);
+  }, [fCons, dateFrom, dateTo]);
 
   const telefoniaDailyGroups = useMemo(() => {
     const groups = new Map();
