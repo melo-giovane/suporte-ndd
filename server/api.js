@@ -379,6 +379,7 @@ function readDashboardData(db) {
         cliente,
         modulo,
         tramites,
+        produto,
         descricao,
         tempo_chamado_raw AS tempoChamadoRaw
       FROM ellevo_tickets
@@ -468,6 +469,7 @@ function readDashboardDataForAttendant(db, user, scope) {
         cliente,
         modulo,
         tramites,
+        produto,
         descricao,
         tempo_chamado_raw AS tempoChamadoRaw
       FROM ellevo_tickets
@@ -569,6 +571,7 @@ function readDashboardDataForAttendant(db, user, scope) {
             cliente,
             modulo,
             tramites,
+            produto,
             descricao,
             tempo_chamado_raw AS tempoChamadoRaw
           FROM ellevo_tickets

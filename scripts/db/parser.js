@@ -222,8 +222,9 @@ export function parseDashboardWorkbook(XLSX, workbook, referenceYear) {
             qualificacao: String(r[8] || "").trim(),
             severidade: String(r[9] || "").trim(),
             tramites: String(r[10] || ""),
-            descricao: String(r[11] || ""),
-            tempoChamadoRaw: String(r[12] || ""),
+            produto: String(r[11] || "").trim(),
+            descricao: String(r[12] || ""),
+            tempoChamadoRaw: String(r[13] || ""),
           };
         })
     : [];

@@ -74,9 +74,9 @@ export function importDashboardToSqlite({
     INSERT INTO ellevo_tickets (
       chamado, data_abertura, data_fechamento, status, titulo,
       categoria_raw, categoria_normalizada, cliente, modulo, natureza,
-      responsavel, qualificacao, severidade, tramites, descricao,
+      responsavel, qualificacao, severidade, tramites, produto, descricao,
       tempo_chamado_raw, source_file
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(chamado) DO UPDATE SET
       data_abertura = excluded.data_abertura,
       data_fechamento = excluded.data_fechamento,
@@ -90,7 +90,8 @@ export function importDashboardToSqlite({
       responsavel = excluded.responsavel,
       qualificacao = excluded.qualificacao,
       severidade = excluded.severidade,
-        tramites = excluded.tramites,
+      tramites = excluded.tramites,
+      produto = excluded.produto,
       descricao = excluded.descricao,
       tempo_chamado_raw = excluded.tempo_chamado_raw,
       source_file = excluded.source_file,
@@ -251,6 +252,7 @@ export function importDashboardToSqlite({
         row.qualificacao,
         row.severidade,
         row.tramites,
+        row.produto,
         row.descricao,
         row.tempoChamadoRaw,
         resolvedInput,

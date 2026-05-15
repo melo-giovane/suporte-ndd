@@ -51,6 +51,7 @@ export function useDashboardController({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [dayTypeFilter, setDayTypeFilter] = useState("all");
+  const [produtoFilter, setProdutoFilter] = useState("");
   const [seriesVis, setSeriesVis] = useState({
     lig: true,
     transf: true,
@@ -350,9 +351,33 @@ export function useDashboardController({
     () => filterByDateRange(atend, dateFrom, dateTo, dayTypeFilter),
     [atend, dateFrom, dateTo, dayTypeFilter],
   );
+  const produtoLabel = (t) => {
+    const raw = String(t?.produto || "").trim();
+    return raw || "Não informado";
+  };
+
+  const produtoOptions = useMemo(() => {
+    const set = new Set();
+    const collect = (arr) => {
+      (arr || []).forEach((t) => set.add(produtoLabel(t)));
+    };
+    collect(tickets);
+    collect(allOwnTickets);
+    collect(allTeamTickets);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [tickets, allOwnTickets, allTeamTickets]);
+
+  const applyProdutoFilter = (arr) => {
+    if (!produtoFilter) return arr;
+    return arr.filter((t) => produtoLabel(t) === produtoFilter);
+  };
+
   const fTickets = useMemo(
-    () => filterByDateRange(tickets, dateFrom, dateTo, dayTypeFilter),
-    [tickets, dateFrom, dateTo, dayTypeFilter],
+    () =>
+      applyProdutoFilter(
+        filterByDateRange(tickets, dateFrom, dateTo, dayTypeFilter),
+      ),
+    [tickets, dateFrom, dateTo, dayTypeFilter, produtoFilter],
   );
 
   const fChamados = useMemo(
@@ -378,16 +403,22 @@ export function useDashboardController({
     [allTeamAtend, dateFrom, dateTo, dayTypeFilter],
   );
   const fOwnTickets = useMemo(
-    () => filterByDateRange(allOwnTickets, dateFrom, dateTo, dayTypeFilter),
-    [allOwnTickets, dateFrom, dateTo, dayTypeFilter],
+    () =>
+      applyProdutoFilter(
+        filterByDateRange(allOwnTickets, dateFrom, dateTo, dayTypeFilter),
+      ),
+    [allOwnTickets, dateFrom, dateTo, dayTypeFilter, produtoFilter],
   );
   const fOwnChamados = useMemo(
     () => filterByDateRange(allOwnChamados, dateFrom, dateTo, dayTypeFilter),
     [allOwnChamados, dateFrom, dateTo, dayTypeFilter],
   );
   const fTeamTickets = useMemo(
-    () => filterByDateRange(allTeamTickets, dateFrom, dateTo, dayTypeFilter),
-    [allTeamTickets, dateFrom, dateTo, dayTypeFilter],
+    () =>
+      applyProdutoFilter(
+        filterByDateRange(allTeamTickets, dateFrom, dateTo, dayTypeFilter),
+      ),
+    [allTeamTickets, dateFrom, dateTo, dayTypeFilter, produtoFilter],
   );
   const fTeamChamados = useMemo(
     () => filterByDateRange(allTeamChamados, dateFrom, dateTo, dayTypeFilter),
@@ -633,6 +664,8 @@ export function useDashboardController({
     dateFrom,
     dateTo,
     dayTypeFilter,
+    produtoFilter,
+    produtoOptions,
     seriesVis,
     metricSel,
     saveStatus,
@@ -670,6 +703,7 @@ export function useDashboardController({
     setDateFrom,
     setDateTo,
     setDayTypeFilter,
+    setProdutoFilter,
     setSeriesVis,
     setMetricSel,
     setSaveStatus,

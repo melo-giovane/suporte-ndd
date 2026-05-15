@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\geovane.melo\\\\OneDrive - NDD.Tech\\\\Documentos\\\\Projetos\\\\relatorios-suporte\" -Recurse -File -Filter \"*.jsx\" -ErrorAction SilentlyContinue)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(npm run *)",
+      "PowerShell(npm.cmd run build 2>&1 | Select-Object -Last 60)"
     ]
   }
 }

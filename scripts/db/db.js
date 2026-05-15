@@ -238,6 +238,7 @@ export function ensureSchema(db) {
       qualificacao TEXT,
       severidade TEXT,
       tramites TEXT,
+      produto TEXT,
       descricao TEXT,
       tempo_chamado_raw TEXT,
       source_file TEXT NOT NULL,
@@ -340,6 +341,9 @@ export function ensureSchema(db) {
 
   if (!ticketCols.includes("tramites")) {
     db.exec("ALTER TABLE ellevo_tickets ADD COLUMN tramites TEXT");
+  }
+  if (!ticketCols.includes("produto")) {
+    db.exec("ALTER TABLE ellevo_tickets ADD COLUMN produto TEXT");
   }
   if (!ticketCols.includes("descricao")) {
     db.exec("ALTER TABLE ellevo_tickets ADD COLUMN descricao TEXT");

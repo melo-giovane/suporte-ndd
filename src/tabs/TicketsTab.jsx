@@ -241,6 +241,7 @@ export default function TicketsTab({
       visibleTicketsList.map((t) => [
         t.chamado || "-",
         (t.cliente || "-").slice(0, 32),
+        (String(t.produto || "").trim() || "Não informado").slice(0, 24),
         (t.qualificacao && t.qualificacao !== "-"
           ? t.qualificacao
           : "—"
@@ -740,6 +741,7 @@ export default function TicketsTab({
               headers={[
                 "Acionamento",
                 "Cliente",
+                "Produto",
                 "Qualificação",
                 "Status",
                 "Responsável",
@@ -749,7 +751,7 @@ export default function TicketsTab({
               ]}
               sortable
               getSortValue={(cell, ci) => {
-                if (ci === 7 && typeof cell === "string") {
+                if (ci === 8 && typeof cell === "string") {
                   const m = cell.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
                   if (m) {
                     return new Date(

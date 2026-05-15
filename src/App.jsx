@@ -884,6 +884,8 @@ export default function App() {
     dateFrom,
     dateTo,
     dayTypeFilter,
+    produtoFilter,
+    produtoOptions,
     seriesVis,
     metricSel,
     saveStatus,
@@ -916,6 +918,7 @@ export default function App() {
     setDateFrom,
     setDateTo,
     setDayTypeFilter,
+    setProdutoFilter,
     setSeriesVis,
     setMetricSel,
     handleIncrementalFile,
@@ -2333,6 +2336,26 @@ export default function App() {
               <option value="holidays">Feriados</option>
               <option value="weekends">Finais de semana</option>
             </select>
+            <select
+              value={produtoFilter}
+              onChange={(e) => setProdutoFilter(e.target.value)}
+              title="Filtrar tickets por produto"
+              style={{
+                background: P.cardH,
+                border: `1px solid ${P.bdr}`,
+                borderRadius: 6,
+                padding: "4px 8px",
+                color: P.text,
+                fontSize: 12,
+              }}
+            >
+              <option value="">Todos os produtos</option>
+              {produtoOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
             {dateRangeInvalid && (
               <span
                 style={{
@@ -2345,12 +2368,16 @@ export default function App() {
                 ⚠️ Período inválido
               </span>
             )}
-            {(dateFrom || dateTo || dayTypeFilter !== "all") && (
+            {(dateFrom ||
+              dateTo ||
+              dayTypeFilter !== "all" ||
+              produtoFilter) && (
               <button
                 onClick={() => {
                   setDateFrom("");
                   setDateTo("");
                   setDayTypeFilter("all");
+                  setProdutoFilter("");
                 }}
                 style={{
                   background: P.red,
@@ -4364,6 +4391,10 @@ export default function App() {
               </div>
               <div>
                 <b>Módulo:</b> {selectedTicket.modulo || "-"}
+              </div>
+              <div>
+                <b>Produto:</b>{" "}
+                {String(selectedTicket.produto || "").trim() || "Não informado"}
               </div>
               <div>
                 <b>Tempo do Acionamento:</b> {selectedTicket.tempoChamadoRaw || "-"}
