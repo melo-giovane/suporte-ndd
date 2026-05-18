@@ -479,3 +479,101 @@ export function buildDailyChart(fCons) {
     };
   });
 }
+
+function resolveHourFromTicket(t) {
+  if (!t?.dataAbertura) return null;
+  const d = new Date(t.dataAbertura);
+  return Number.isNaN(d.getTime()) ? null : d.getHours();
+}
+
+export function buildHourlyActivity(fCons, fTickets, opts) {
+  const {
+    dateFrom = "",
+    dateTo = "",
+    resolveHourFromConsEntry,
+    resolveDayGroupFromConsEntry,
+  } = opts || {};
+
+  const buckets = new Map();
+  let minDayKey = null;
+  let maxDayKey = null;
+
+  const ensure = (hour) => {
+    if (!buckets.has(hour)) {
+      buckets.set(hour, {
+        hora: hour,
+        total: 0,
+        atendidas: 0,
+        naoAtendidas: 0,
+        abandonadas: 0,
+        registros: 0,
+        tickets: 0,
+      });
+    }
+    return buckets.get(hour);
+  };
+
+  (fCons || []).forEach((row) => {
+    const hour =
+      typeof resolveHourFromConsEntry === "function"
+        ? resolveHourFromConsEntry(row)
+        : null;
+    if (hour === null) return;
+
+    if (typeof resolveDayGroupFromConsEntry === "function") {
+      const dayKey = resolveDayGroupFromConsEntry(row)?.key;
+      if (dayKey && /^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
+        if (!minDayKey || dayKey < minDayKey) minDayKey = dayKey;
+        if (!maxDayKey || dayKey > maxDayKey) maxDayKey = dayKey;
+      }
+    }
+
+    const b = ensure(hour);
+    b.total += Number(row.total) || 0;
+    b.atendidas += Number(row.atendidas) || 0;
+    b.naoAtendidas += Number(row.naoAtendidas) || 0;
+    b.abandonadas += Number(row.abandonadas) || 0;
+    b.registros += 1;
+  });
+
+  (fTickets || []).forEach((t) => {
+    const hour = resolveHourFromTicket(t);
+    if (hour === null) return;
+    ensure(hour).tickets += 1;
+  });
+
+  const startKey = dateFrom || minDayKey;
+  const endKey = dateTo || maxDayKey;
+  let daysCount = 0;
+  if (startKey && endKey) {
+    const start = new Date(`${startKey}T00:00:00`);
+    const end = new Date(`${endKey}T00:00:00`);
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+      const diff = Math.round((end - start) / 86400000) + 1;
+      daysCount = diff > 0 ? diff : 0;
+    }
+  }
+
+  return Array.from(buckets.values())
+    .sort((a, b) => a.hora - b.hora)
+    .map((row) => {
+      const indisponiveis = row.naoAtendidas + row.abandonadas;
+      return {
+        ...row,
+        horaLabel: `${String(row.hora).padStart(2, "0")}:00`,
+        indisponiveis,
+        daysCount,
+        mediaTotalHora: daysCount
+          ? Math.round((row.total / daysCount) * 10) / 10
+          : 0,
+        mediaAtendidasHora: daysCount
+          ? Math.round((row.atendidas / daysCount) * 10) / 10
+          : 0,
+        mediaTicketsHora: daysCount
+          ? Math.round((row.tickets / daysCount) * 10) / 10
+          : 0,
+        txAtend: row.total ? row.atendidas / row.total : 0,
+        txAbandono: row.total ? indisponiveis / row.total : 0,
+      };
+    });
+}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildKpis, filterByDateRange } from "./dashboardModel.js";
+import {
+  buildKpis,
+  buildHourlyActivity,
+  filterByDateRange,
+} from "./dashboardModel.js";
 
 describe("filterByDateRange dayType", () => {
   const base = [
@@ -151,5 +155,173 @@ describe("buildKpis", () => {
     expect(kpis.dias).toBe(2);
     expect(kpis.tma).toBe(25);
     expect(kpis.tme).toBe(13);
+  });
+});
+
+describe("buildHourlyActivity", () => {
+  // Helpers fake — equivalentes simplificados aos do App.jsx, suficientes para teste.
+  const resolveHourFromConsEntry = (entry) => {
+    const v = Number.parseInt(String(entry?.hora ?? ""), 10);
+    return Number.isInteger(v) && v >= 0 && v <= 23 ? v : null;
+  };
+  const resolveDayGroupFromConsEntry = (entry) => {
+    const rawDate = entry?.dateReal;
+    const parsed =
+      rawDate instanceof Date ? rawDate : rawDate ? new Date(rawDate) : null;
+    if (parsed && !Number.isNaN(parsed.getTime())) {
+      const yyyy = parsed.getFullYear();
+      const mm = `${parsed.getMonth() + 1}`.padStart(2, "0");
+      const dd = `${parsed.getDate()}`.padStart(2, "0");
+      return { key: `${yyyy}-${mm}-${dd}`, label: `${dd}/${mm}` };
+    }
+    return { key: "(sem-data)", label: "-" };
+  };
+  const opts = (extra = {}) => ({
+    dateFrom: "",
+    dateTo: "",
+    resolveHourFromConsEntry,
+    resolveDayGroupFromConsEntry,
+    ...extra,
+  });
+
+  it("agrupa ligações em 3 horas distintas e mantém tickets em zero", () => {
+    const cons = [
+      {
+        hora: 8,
+        dateReal: new Date("2026-04-01T08:00:00"),
+        total: 10,
+        atendidas: 8,
+        naoAtendidas: 1,
+        abandonadas: 1,
+      },
+      {
+        hora: 9,
+        dateReal: new Date("2026-04-01T09:00:00"),
+        total: 20,
+        atendidas: 15,
+        naoAtendidas: 3,
+        abandonadas: 2,
+      },
+      {
+        hora: 10,
+        dateReal: new Date("2026-04-01T10:00:00"),
+        total: 5,
+        atendidas: 5,
+        naoAtendidas: 0,
+        abandonadas: 0,
+      },
+    ];
+    const out = buildHourlyActivity(cons, [], opts());
+    expect(out).toHaveLength(3);
+    expect(out.map((b) => b.hora)).toEqual([8, 9, 10]);
+    expect(out[0]).toMatchObject({
+      hora: 8,
+      horaLabel: "08:00",
+      total: 10,
+      atendidas: 8,
+      naoAtendidas: 1,
+      abandonadas: 1,
+      tickets: 0,
+    });
+  });
+
+  it("agrupa tickets pela hora de dataAbertura, sem ligações", () => {
+    const tickets = [
+      { dataAbertura: "2026-04-01T14:30:00" },
+      { dataAbertura: "2026-04-01T14:45:00" },
+    ];
+    const out = buildHourlyActivity([], tickets, opts());
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      hora: 14,
+      horaLabel: "14:00",
+      tickets: 2,
+      total: 0,
+      atendidas: 0,
+    });
+  });
+
+  it("mescla ligação e tickets na mesma hora em um único bucket", () => {
+    const cons = [
+      {
+        hora: 9,
+        dateReal: new Date("2026-04-01T09:00:00"),
+        total: 4,
+        atendidas: 3,
+        naoAtendidas: 1,
+        abandonadas: 0,
+      },
+    ];
+    const tickets = [
+      { dataAbertura: "2026-04-01T09:10:00" },
+      { dataAbertura: "2026-04-01T09:55:00" },
+    ];
+    const out = buildHourlyActivity(cons, tickets, opts());
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      hora: 9,
+      total: 4,
+      atendidas: 3,
+      tickets: 2,
+    });
+  });
+
+  it("descarta tickets com dataAbertura inválida ou ausente", () => {
+    const tickets = [
+      { dataAbertura: "2026-04-01T11:00:00" },
+      { dataAbertura: "" },
+      { dataAbertura: null },
+      { dataAbertura: "nao-eh-data" },
+      {},
+    ];
+    const out = buildHourlyActivity([], tickets, opts());
+    expect(out).toHaveLength(1);
+    expect(out[0].hora).toBe(11);
+    expect(out[0].tickets).toBe(1);
+  });
+
+  it("calcula mediaTicketsHora dividindo por daysCount derivado de dateFrom/dateTo", () => {
+    // intervalo de 5 dias; 10 tickets na hora 14 → média 2.0
+    const tickets = Array.from({ length: 10 }, () => ({
+      dataAbertura: "2026-04-01T14:00:00",
+    }));
+    const out = buildHourlyActivity([], tickets, {
+      ...opts(),
+      dateFrom: "2026-04-01",
+      dateTo: "2026-04-05",
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].daysCount).toBe(5);
+    expect(out[0].mediaTicketsHora).toBe(2);
+  });
+
+  it("usa min/max de fCons como fallback quando dateFrom/dateTo são vazios; tickets não expandem o range", () => {
+    const cons = [
+      {
+        hora: 9,
+        dateReal: new Date("2026-04-01T09:00:00"),
+        total: 2,
+        atendidas: 2,
+        naoAtendidas: 0,
+        abandonadas: 0,
+      },
+      {
+        hora: 9,
+        dateReal: new Date("2026-04-03T09:00:00"),
+        total: 2,
+        atendidas: 2,
+        naoAtendidas: 0,
+        abandonadas: 0,
+      },
+    ];
+    // tickets em datas fora do range das ligações; não devem alterar daysCount
+    const tickets = [
+      { dataAbertura: "2026-01-01T09:00:00" },
+      { dataAbertura: "2026-12-31T09:00:00" },
+    ];
+    const out = buildHourlyActivity(cons, tickets, opts());
+    expect(out).toHaveLength(1);
+    // 01/04 → 03/04 = 3 dias
+    expect(out[0].daysCount).toBe(3);
   });
 });
