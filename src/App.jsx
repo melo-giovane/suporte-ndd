@@ -35,7 +35,6 @@ import {
   AlertTriangle,
   BarChart3,
   Calendar,
-  ClipboardList,
   Clock,
   Phone,
   Plus,
