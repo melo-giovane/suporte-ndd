@@ -6,7 +6,27 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "PowerShell(npm run *)",
       "PowerShell(npm.cmd run build 2>&1 | Select-Object -Last 60)",
-      "PowerShell(npm.cmd run build)"
+      "PowerShell(npm.cmd run build)",
+      "PowerShell(git *)",
+      "Skill(superpowers:writing-plans)",
+      "PowerShell(New-Item *)",
+      "Skill(superpowers:subagent-driven-development)",
+      "PowerShell(npm test *)",
+      "PowerShell(npm.cmd test -- src/models/dashboardModel.test.js 2>&1 | Select-Object -Last 80)",
+      "PowerShell(npm.cmd test -- src/models/dashboardModel.test.js 2>&1 | Select-Object -Last 30)",
+      "PowerShell(\\(Get-Content \"src\\\\models\\\\dashboardModel.js\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(npx vitest run src/models/dashboardModel.test.js 2>&1 | Select-Object -Last 40)",
+      "PowerShell(node \"node_modules\\\\vitest\\\\vitest.mjs\" run src/models/dashboardModel.test.js 2>&1 | Select-Object -Last 50)",
+      "PowerShell(npm.cmd test -- src/models/dashboardModel.test.js --run 2>&1 | Select-Object -Last 60)",
+      "PowerShell(npx eslint src/tabs/AtividadeHoraTab.jsx)",
+      "PowerShell(cmd /c \"npx eslint src\\\\tabs\\\\AtividadeHoraTab.jsx\")",
+      "PowerShell(cmd /c \"npx eslint src\\\\tabs\\\\ResumoTab.jsx\")",
+      "PowerShell(npx eslint src/tabs/AtividadeHoraTab.jsx 2>&1 | Select-Object -First 50)",
+      "PowerShell(node node_modules/eslint/bin/eslint.js src/tabs/AtividadeHoraTab.jsx 2>&1 | Select-Object -First 50)",
+      "PowerShell(node node_modules/eslint/bin/eslint.js src/tabs/ResumoTab.jsx 2>&1 | Select-Object -First 50)",
+      "PowerShell(npx.cmd eslint src/tabs/AtividadeHoraTab.jsx)",
+      "PowerShell(git diff *)",
+      "PowerShell(git show *)"
     ]
   }
 }
