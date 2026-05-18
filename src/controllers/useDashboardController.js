@@ -73,6 +73,10 @@ export function useDashboardController({
   });
   const [teamTotals, setTeamTotals] = useState(null);
   const [ticketGoalPct, setTicketGoalPct] = useState(20);
+  const [alertSettings, setAlertSettings] = useState({
+    tktAbertosLimit: 3,
+    tmaLimitSec: 300,
+  });
   // Dedicated own/team datasets — always populated regardless of viewScope.
   const [allOwnCons, setAllOwnCons] = useState([]);
   const [allOwnAtend, setAllOwnAtend] = useState([]);
@@ -198,6 +202,17 @@ export function useDashboardController({
         const nextTicketGoalPct = Number(data.ticketGoalPct);
         if (Number.isFinite(nextTicketGoalPct)) {
           setTicketGoalPct(nextTicketGoalPct);
+        }
+        const rawAlertSettings = data.alertSettings;
+        if (rawAlertSettings && typeof rawAlertSettings === "object") {
+          const nextTkt = Number(rawAlertSettings.tktAbertosLimit);
+          const nextTma = Number(rawAlertSettings.tmaLimitSec);
+          setAlertSettings((prev) => ({
+            tktAbertosLimit: Number.isFinite(nextTkt)
+              ? nextTkt
+              : prev.tktAbertosLimit,
+            tmaLimitSec: Number.isFinite(nextTma) ? nextTma : prev.tmaLimitSec,
+          }));
         }
         setSaveStatus({ state: "idle", message: "" });
         setLoaded(true);
@@ -674,6 +689,7 @@ export function useDashboardController({
     reprocessStatus,
     teamTotals,
     ticketGoalPct,
+    alertSettings,
     incrementalFileRef,
     reprocessFileRef,
     fCons,

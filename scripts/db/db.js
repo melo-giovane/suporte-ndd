@@ -42,6 +42,8 @@ const DEFAULT_ATTENDANTS = [
 ];
 
 const DEFAULT_TICKET_GOAL_PCT = 20;
+const DEFAULT_ALERT_TKT_ABERTOS_LIMIT = 3;
+const DEFAULT_ALERT_TMA_LIMIT_SEC = 300;
 
 export function listAttendants(db) {
   return db
@@ -389,6 +391,22 @@ export function ensureSchema(db) {
       ON CONFLICT(key) DO NOTHING
     `,
   ).run(String(DEFAULT_TICKET_GOAL_PCT));
+
+  db.prepare(
+    `
+      INSERT INTO app_settings (key, value)
+      VALUES ('alert_tkt_abertos_limit', ?)
+      ON CONFLICT(key) DO NOTHING
+    `,
+  ).run(String(DEFAULT_ALERT_TKT_ABERTOS_LIMIT));
+
+  db.prepare(
+    `
+      INSERT INTO app_settings (key, value)
+      VALUES ('alert_tma_limit_sec', ?)
+      ON CONFLICT(key) DO NOTHING
+    `,
+  ).run(String(DEFAULT_ALERT_TMA_LIMIT_SEC));
 
   db.exec(`
     UPDATE users

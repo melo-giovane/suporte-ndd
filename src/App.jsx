@@ -812,6 +812,14 @@ export default function App() {
     state: "idle",
     message: "",
   });
+  const [alertSettingsInput, setAlertSettingsInput] = useState({
+    tktAbertosLimit: "3",
+    tmaLimitSec: "300",
+  });
+  const [alertSettingsStatus, setAlertSettingsStatus] = useState({
+    state: "idle",
+    message: "",
+  });
   const [userForm, setUserForm] = useState({
     username: "",
     password: "",
@@ -893,6 +901,7 @@ export default function App() {
     incrementalStatus,
     reprocessStatus,
     ticketGoalPct,
+    alertSettings,
     incrementalFileRef,
     reprocessFileRef,
     fCons,
@@ -931,6 +940,13 @@ export default function App() {
     onUnauthorized: handleLogout,
     attendantsCatalog: userLinkOptions.attendants,
   });
+
+  const alertTktLimit = Number.isFinite(Number(alertSettings?.tktAbertosLimit))
+    ? Number(alertSettings.tktAbertosLimit)
+    : 3;
+  const alertTmaLimit = Number.isFinite(Number(alertSettings?.tmaLimitSec))
+    ? Number(alertSettings.tmaLimitSec)
+    : 300;
 
   const totalDaysCount = useMemo(() => {
     const uniqueDays = new Set();
@@ -1265,6 +1281,86 @@ export default function App() {
       setTicketGoalInput(String(ticketGoalPct));
     }
   }, [ticketGoalPct]);
+
+  useEffect(() => {
+    if (!alertSettings) return;
+    setAlertSettingsInput({
+      tktAbertosLimit: String(alertSettings.tktAbertosLimit ?? 3),
+      tmaLimitSec: String(alertSettings.tmaLimitSec ?? 300),
+    });
+  }, [alertSettings]);
+
+  const handleSaveAlertSettings = useCallback(
+    async (e) => {
+      e.preventDefault();
+
+      const parsedTkt = Number.parseInt(
+        String(alertSettingsInput.tktAbertosLimit || "").replace(/[^\d-]/g, ""),
+        10,
+      );
+      const parsedTma = Number.parseInt(
+        String(alertSettingsInput.tmaLimitSec || "").replace(/[^\d-]/g, ""),
+        10,
+      );
+
+      if (!Number.isFinite(parsedTkt) || parsedTkt < 0 || parsedTkt > 9999) {
+        setAlertSettingsStatus({
+          state: "error",
+          message: "Informe um limite válido de tickets em aberto (0 a 9999).",
+        });
+        return;
+      }
+
+      if (!Number.isFinite(parsedTma) || parsedTma < 0 || parsedTma > 86400) {
+        setAlertSettingsStatus({
+          state: "error",
+          message: "Informe um limite válido de TMA em segundos (0 a 86400).",
+        });
+        return;
+      }
+
+      setAlertSettingsStatus({
+        state: "saving",
+        message: "Salvando parâmetros...",
+      });
+
+      try {
+        const resp = await fetch(apiUrl("/api/settings/alerts"), {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            tktAbertosLimit: parsedTkt,
+            tmaLimitSec: parsedTma,
+          }),
+        });
+
+        const body = await resp.json();
+        if (!resp.ok || !body?.ok) {
+          throw new Error(
+            body?.error || "Não foi possível salvar os parâmetros.",
+          );
+        }
+
+        setAlertSettingsStatus({
+          state: "success",
+          message: "Parâmetros atualizados com sucesso.",
+        });
+        await retryLoadFromDatabase();
+      } catch (error) {
+        setAlertSettingsStatus({
+          state: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Falha ao salvar os parâmetros.",
+        });
+      }
+    },
+    [authToken, retryLoadFromDatabase, alertSettingsInput],
+  );
 
   useEffect(() => {
     if (isMaster) {
@@ -2588,8 +2684,6 @@ export default function App() {
               catData={catData}
               sevData={sevData}
               equipe={equipe}
-              seriesVis={seriesVis}
-              setSeriesVis={setSeriesVis}
               onTicketDrilldown={handleTicketDrilldown}
               isAttendantOwnScope={isAttendant && attendantScope === "own"}
               isAttendant={isAttendant}
@@ -2611,6 +2705,7 @@ export default function App() {
               attendantsCatalog={userLinkOptions.attendants}
               isMasterView={isMaster}
               ticketGoalPct={ticketGoalPct}
+              alertSettings={alertSettings}
             />
           </Suspense>
         )}
@@ -3493,7 +3588,7 @@ export default function App() {
             <Section title="Alertas" icon={<Ico Icon={AlertTriangle} />}>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {equipe
-                  .filter((e) => e.tktAbertos > 3)
+                  .filter((e) => e.tktAbertos > alertTktLimit)
                   .map((e) => (
                     <div
                       key={e.nome + "t"}
@@ -3507,11 +3602,11 @@ export default function App() {
                       }}
                     >
                       🔴 <b>{e.nome}</b> — <b>{e.tktAbertos}</b> tickets em
-                      aberto
+                      aberto (acima de {alertTktLimit})
                     </div>
                   ))}
                 {equipe
-                  .filter((e) => e.tma > 300)
+                  .filter((e) => e.tma > alertTmaLimit)
                   .map((e) => (
                     <div
                       key={e.nome + "m"}
@@ -3525,10 +3620,13 @@ export default function App() {
                       }}
                     >
                       ⏱ <b>{e.nome}</b> — TMA de <b>{fmtSec(e.tma)}</b> (acima
-                      de 5min)
+                      de {fmtSec(alertTmaLimit)})
                     </div>
                   ))}
-                {equipe.every((e) => e.tktAbertos <= 3 && e.tma <= 300) && (
+                {equipe.every(
+                  (e) =>
+                    e.tktAbertos <= alertTktLimit && e.tma <= alertTmaLimit,
+                ) && (
                   <div
                     style={{
                       background: P.greenD,
@@ -4231,6 +4329,154 @@ export default function App() {
                       }}
                     >
                       {ticketGoalStatus.message}
+                    </div>
+                  )}
+                </form>
+
+                <form
+                  onSubmit={handleSaveAlertSettings}
+                  style={{
+                    background: P.card,
+                    borderRadius: 14,
+                    border: `1px solid ${P.bdr}`,
+                    padding: 14,
+                    flex: "1 1 280px",
+                    minWidth: 280,
+                    maxWidth: 360,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: P.dim,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      marginBottom: 10,
+                    }}
+                  >
+                    Parâmetros de alertas
+                  </div>
+
+                  <div style={{ fontSize: 12, color: P.dim, marginBottom: 8 }}>
+                    Define os limites que disparam alertas na aba Resumo e na
+                    visão de equipe. Atendentes acima destes limites são
+                    sinalizados.
+                  </div>
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <label
+                        style={{
+                          fontSize: 11,
+                          color: P.dim,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Tickets em aberto acima de
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="9999"
+                        step="1"
+                        value={alertSettingsInput.tktAbertosLimit}
+                        onChange={(e) => {
+                          setAlertSettingsInput((prev) => ({
+                            ...prev,
+                            tktAbertosLimit: e.target.value,
+                          }));
+                          if (alertSettingsStatus.state !== "idle") {
+                            setAlertSettingsStatus({
+                              state: "idle",
+                              message: "",
+                            });
+                          }
+                        }}
+                        style={{
+                          background: P.cardH,
+                          border: `1px solid ${P.bdr}`,
+                          borderRadius: 8,
+                          color: P.text,
+                          padding: "8px 10px",
+                          fontSize: 12,
+                        }}
+                        required
+                      />
+                    </div>
+
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <label
+                        style={{
+                          fontSize: 11,
+                          color: P.dim,
+                          fontWeight: 600,
+                        }}
+                      >
+                        TMA acima de (segundos)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="86400"
+                        step="1"
+                        value={alertSettingsInput.tmaLimitSec}
+                        onChange={(e) => {
+                          setAlertSettingsInput((prev) => ({
+                            ...prev,
+                            tmaLimitSec: e.target.value,
+                          }));
+                          if (alertSettingsStatus.state !== "idle") {
+                            setAlertSettingsStatus({
+                              state: "idle",
+                              message: "",
+                            });
+                          }
+                        }}
+                        style={{
+                          background: P.cardH,
+                          border: `1px solid ${P.bdr}`,
+                          borderRadius: 8,
+                          color: P.text,
+                          padding: "8px 10px",
+                          fontSize: 12,
+                        }}
+                        required
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      style={{
+                        marginTop: 4,
+                        background: P.accent,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "9px 10px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Salvar parâmetros
+                    </button>
+                  </div>
+
+                  {alertSettingsStatus.state !== "idle" && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 12,
+                        color:
+                          alertSettingsStatus.state === "success"
+                            ? P.green
+                            : alertSettingsStatus.state === "error"
+                              ? P.red
+                              : P.dim,
+                      }}
+                    >
+                      {alertSettingsStatus.message}
                     </div>
                   )}
                 </form>

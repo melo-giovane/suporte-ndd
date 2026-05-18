@@ -34,6 +34,10 @@ const MASTER_AUTO_SYNC_ENABLED =
     "false";
 const DEFAULT_TICKET_GOAL_PCT = 20;
 const TICKET_GOAL_SETTING_KEY = "ticket_goal_pct";
+const DEFAULT_ALERT_TKT_ABERTOS_LIMIT = 3;
+const DEFAULT_ALERT_TMA_LIMIT_SEC = 300;
+const ALERT_TKT_ABERTOS_SETTING_KEY = "alert_tkt_abertos_limit";
+const ALERT_TMA_SETTING_KEY = "alert_tma_limit_sec";
 
 app.use(express.json());
 
@@ -243,6 +247,54 @@ function saveTicketGoalPct(db, value) {
         updated_at = datetime('now')
     `,
   ).run(TICKET_GOAL_SETTING_KEY, String(value));
+}
+
+function normalizeNonNegativeInt(rawValue, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number.parseInt(
+    String(rawValue ?? "").replace(/[^\d-]/g, ""),
+    10,
+  );
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function readAlertSettings(db) {
+  const rows = db
+    .prepare(
+      `
+        SELECT key, value
+        FROM app_settings
+        WHERE key IN (?, ?)
+      `,
+    )
+    .all(ALERT_TKT_ABERTOS_SETTING_KEY, ALERT_TMA_SETTING_KEY);
+
+  const map = new Map(rows.map((r) => [r.key, r.value]));
+  const tktAbertosLimit =
+    normalizeNonNegativeInt(map.get(ALERT_TKT_ABERTOS_SETTING_KEY), {
+      max: 9999,
+    }) ?? DEFAULT_ALERT_TKT_ABERTOS_LIMIT;
+  const tmaLimitSec =
+    normalizeNonNegativeInt(map.get(ALERT_TMA_SETTING_KEY), {
+      max: 86400,
+    }) ?? DEFAULT_ALERT_TMA_LIMIT_SEC;
+
+  return { tktAbertosLimit, tmaLimitSec };
+}
+
+function saveAlertSettings(db, { tktAbertosLimit, tmaLimitSec }) {
+  const stmt = db.prepare(
+    `
+      INSERT INTO app_settings (key, value, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = datetime('now')
+    `,
+  );
+  stmt.run(ALERT_TKT_ABERTOS_SETTING_KEY, String(tktAbertosLimit));
+  stmt.run(ALERT_TMA_SETTING_KEY, String(tmaLimitSec));
 }
 
 function requireAuth(req, res, next) {
@@ -1061,6 +1113,50 @@ app.put("/api/settings/ticket-goal", requireAuth, requireMaster, (req, res) => {
   }
 });
 
+app.put("/api/settings/alerts", requireAuth, requireMaster, (req, res) => {
+  const tktAbertosLimit = normalizeNonNegativeInt(req.body?.tktAbertosLimit, {
+    max: 9999,
+  });
+  const tmaLimitSec = normalizeNonNegativeInt(req.body?.tmaLimitSec, {
+    max: 86400,
+  });
+
+  if (tktAbertosLimit === null) {
+    return res.status(400).json({
+      ok: false,
+      error: "Informe um limite válido de tickets em aberto (0 a 9999).",
+    });
+  }
+
+  if (tmaLimitSec === null) {
+    return res.status(400).json({
+      ok: false,
+      error: "Informe um limite válido de TMA em segundos (0 a 86400).",
+    });
+  }
+
+  let db;
+  try {
+    db = openDatabase();
+    ensureSchema(db);
+    saveAlertSettings(db, { tktAbertosLimit, tmaLimitSec });
+
+    return res.json({
+      ok: true,
+      settings: {
+        alertSettings: { tktAbertosLimit, tmaLimitSec },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Erro desconhecido",
+    });
+  } finally {
+    if (db) db.close();
+  }
+});
+
 app.get("/api/dashboard-data", requireAuth, (req, res) => {
   res.setHeader("Cache-Control", "no-store");
 
@@ -1093,6 +1189,7 @@ app.get("/api/dashboard-data", requireAuth, (req, res) => {
 
     const teamTotals = computeTeamTotals(db);
     const ticketGoalPct = readTicketGoalPct(db);
+    const alertSettings = readAlertSettings(db);
 
     return res.json({
       ok: true,
@@ -1101,6 +1198,7 @@ app.get("/api/dashboard-data", requireAuth, (req, res) => {
         latestImport: latestImport?.importedAt || null,
         teamTotals,
         ticketGoalPct,
+        alertSettings,
         viewScope: effectiveScope,
         role: req.authUser.role,
       },

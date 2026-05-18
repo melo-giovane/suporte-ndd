@@ -60,8 +60,6 @@ export default function ResumoTab({
   catData,
   sevData,
   equipe,
-  seriesVis,
-  setSeriesVis,
   onTicketDrilldown,
   isAttendantOwnScope = false,
   isAttendant = false,
@@ -74,7 +72,14 @@ export default function ResumoTab({
   attendantsCatalog = [],
   isMasterView = false,
   ticketGoalPct = 20,
+  alertSettings = { tktAbertosLimit: 3, tmaLimitSec: 300 },
 }) {
+  const alertTktLimit = Number.isFinite(Number(alertSettings?.tktAbertosLimit))
+    ? Number(alertSettings.tktAbertosLimit)
+    : 3;
+  const alertTmaLimit = Number.isFinite(Number(alertSettings?.tmaLimitSec))
+    ? Number(alertSettings.tmaLimitSec)
+    : 300;
   const series = kpiSeries || {};
   const defaultAgentSel = isAttendant
     ? isAttendantOwnScope
@@ -86,6 +91,7 @@ export default function ResumoTab({
   const [dailyTicketMetricSel, setDailyTicketMetricSel] = useState("__ALL__");
   const [dailyTicketAgentSel, setDailyTicketAgentSel] =
     useState(defaultAgentSel);
+  const [equipeMetricSel, setEquipeMetricSel] = useState("ambos");
 
   useEffect(() => {
     const next = isAttendant
@@ -968,39 +974,25 @@ export default function ResumoTab({
                   letterSpacing: 1,
                 }}
               >
-                Ligações · Transferências · Erros/App por Atendente
+                Ligações + Tickets por Atendente
               </span>
-              <div style={{ display: "flex", gap: 5 }}>
-                {[
-                  { key: "lig", label: "Ligações", color: P.accent },
-                  {
-                    key: "transf",
-                    label: "Transferências",
-                    color: P.green,
-                  },
-                  { key: "erros", label: "Erros/App", color: P.red },
-                ].map(({ key, label, color }) => (
-                  <button
-                    key={key}
-                    onClick={() =>
-                      setSeriesVis((v) => ({ ...v, [key]: !v[key] }))
-                    }
-                    style={{
-                      padding: "3px 10px",
-                      border: `1px solid ${seriesVis[key] ? color : P.bdr}`,
-                      borderRadius: 20,
-                      cursor: "pointer",
-                      background: seriesVis[key] ? color + "22" : "transparent",
-                      color: seriesVis[key] ? color : P.dim,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      transition: "all .15s",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <select
+                value={equipeMetricSel}
+                onChange={(e) => setEquipeMetricSel(e.target.value)}
+                style={{
+                  background: P.cardH,
+                  border: `1px solid ${P.bdr}`,
+                  borderRadius: 8,
+                  color: P.text,
+                  padding: "4px 8px",
+                  fontSize: 10,
+                  minWidth: 180,
+                }}
+              >
+                <option value="lig">Ligações</option>
+                <option value="tkt">Tickets</option>
+                <option value="ambos">Ligações + Tickets</option>
+              </select>
             </div>
             <div style={{ height: 280 }}>
               <ResponsiveContainer>
@@ -1009,7 +1001,8 @@ export default function ResumoTab({
                   <XAxis dataKey="nome" tick={{ fill: P.dim, fontSize: 10 }} />
                   <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
                   <Tooltip content={<TT />} />
-                  {seriesVis.lig && (
+                  {(equipeMetricSel === "lig" ||
+                    equipeMetricSel === "ambos") && (
                     <Bar
                       dataKey="chamAtend"
                       name="Ligações Atendidas"
@@ -1017,19 +1010,12 @@ export default function ResumoTab({
                       radius={[4, 4, 0, 0]}
                     />
                   )}
-                  {seriesVis.transf && (
+                  {(equipeMetricSel === "tkt" ||
+                    equipeMetricSel === "ambos") && (
                     <Bar
-                      dataKey="transferencias"
-                      name="Transferências"
-                      fill={P.green}
-                      radius={[4, 4, 0, 0]}
-                    />
-                  )}
-                  {seriesVis.erros && (
-                    <Bar
-                      dataKey="errosApp"
-                      name="Erros/App"
-                      fill={P.red}
+                      dataKey="tickets"
+                      name="Tickets"
+                      fill={P.purple}
                       radius={[4, 4, 0, 0]}
                     />
                   )}
@@ -1044,7 +1030,7 @@ export default function ResumoTab({
       <Section title="Alertas" icon={<Ico Icon={AlertTriangle} />}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {equipe
-            .filter((e) => e.tktAbertos > 3)
+            .filter((e) => e.tktAbertos > alertTktLimit)
             .map((e) => (
               <div
                 key={e.nome + "t"}
@@ -1058,10 +1044,11 @@ export default function ResumoTab({
                 }}
               >
                 🔴 <b>{e.nome}</b> — <b>{e.tktAbertos}</b> tickets em aberto
+                (acima de {alertTktLimit})
               </div>
             ))}
           {equipe
-            .filter((e) => e.tma > 300)
+            .filter((e) => e.tma > alertTmaLimit)
             .map((e) => (
               <div
                 key={e.nome + "m"}
@@ -1074,11 +1061,13 @@ export default function ResumoTab({
                   border: `1px solid ${P.orange}33`,
                 }}
               >
-                ⏱ <b>{e.nome}</b> — TMA de <b>{fmtSec(e.tma)}</b> (acima de
-                5min)
+                ⏱ <b>{e.nome}</b> — TMA de <b>{fmtSec(e.tma)}</b> (acima de{" "}
+                {fmtSec(alertTmaLimit)})
               </div>
             ))}
-          {equipe.every((e) => e.tktAbertos <= 3 && e.tma <= 300) && (
+          {equipe.every(
+            (e) => e.tktAbertos <= alertTktLimit && e.tma <= alertTmaLimit,
+          ) && (
             <div
               style={{
                 background: P.greenD,
