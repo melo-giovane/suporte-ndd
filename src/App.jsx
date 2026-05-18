@@ -126,6 +126,7 @@ let PIE_C = INITIAL_THEME_MODE === "light" ? PIE_C_LIGHT : PIE_C_DARK;
 
 const ResumoTab = lazy(() => import("./tabs/ResumoTab.jsx"));
 const TicketsTab = lazy(() => import("./tabs/TicketsTab.jsx"));
+const AtividadeHoraTab = lazy(() => import("./tabs/AtividadeHoraTab.jsx"));
 
 const API_BASE = String(import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
 
@@ -830,7 +831,6 @@ export default function App() {
     attendants: [],
   });
   const [expandedTelefoniaDays, setExpandedTelefoniaDays] = useState({});
-  const [hourlyVolumeMode, setHourlyVolumeMode] = useState("volume");
   const [telefoniaTrendAgentSel, setTelefoniaTrendAgentSel] =
     useState("__ALL__");
   const [attendantTeamTrendData, setAttendantTeamTrendData] = useState({
@@ -1476,71 +1476,6 @@ export default function App() {
     }
   }, [isMaster, setTab, tab]);
 
-
-  const hourlyActivity = useMemo(() => {
-    const buckets = new Map();
-    let minDayKey = null;
-    let maxDayKey = null;
-
-    fCons.forEach((row) => {
-      const hour = resolveHourFromConsEntry(row);
-      if (hour === null) return;
-      const dayKey = resolveDayGroupFromConsEntry(row)?.key;
-      if (dayKey && /^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
-        if (!minDayKey || dayKey < minDayKey) minDayKey = dayKey;
-        if (!maxDayKey || dayKey > maxDayKey) maxDayKey = dayKey;
-      }
-
-      const current = buckets.get(hour) || {
-        hora: hour,
-        total: 0,
-        atendidas: 0,
-        naoAtendidas: 0,
-        abandonadas: 0,
-        registros: 0,
-      };
-
-      current.total += Number(row.total) || 0;
-      current.atendidas += Number(row.atendidas) || 0;
-      current.naoAtendidas += Number(row.naoAtendidas) || 0;
-      current.abandonadas += Number(row.abandonadas) || 0;
-      current.registros += 1;
-
-      buckets.set(hour, current);
-    });
-
-    const startKey = dateFrom || minDayKey;
-    const endKey = dateTo || maxDayKey;
-    let daysCount = 0;
-    if (startKey && endKey) {
-      const start = new Date(`${startKey}T00:00:00`);
-      const end = new Date(`${endKey}T00:00:00`);
-      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-        const diff = Math.round((end - start) / 86400000) + 1;
-        daysCount = diff > 0 ? diff : 0;
-      }
-    }
-
-    return Array.from(buckets.values())
-      .sort((a, b) => a.hora - b.hora)
-      .map((row) => {
-        const indisponiveis = row.naoAtendidas + row.abandonadas;
-        return {
-          ...row,
-          horaLabel: `${String(row.hora).padStart(2, "0")}:00`,
-          indisponiveis,
-          daysCount,
-          mediaTotalHora: daysCount
-            ? Math.round((row.total / daysCount) * 10) / 10
-            : 0,
-          mediaAtendidasHora: daysCount
-            ? Math.round((row.atendidas / daysCount) * 10) / 10
-            : 0,
-          txAtend: row.total ? row.atendidas / row.total : 0,
-          txAbandono: row.total ? indisponiveis / row.total : 0,
-        };
-      });
-  }, [fCons, dateFrom, dateTo]);
 
   const telefoniaDailyGroups = useMemo(() => {
     const groups = new Map();
@@ -3141,189 +3076,31 @@ export default function App() {
         )}
 
         {tab === "atividade-hora" && (
-          <>
-            {hourlyActivity.length === 0 ? (
-              <Section title="Atividade por Hora" icon={<Ico Icon={Clock} />}>
-                <div
-                  style={{
-                    padding: 14,
-                    borderRadius: 12,
-                    border: `1px solid ${P.bdr}`,
-                    background: P.card,
-                    color: P.dim,
-                    fontSize: 12,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Nenhum registro por hora foi encontrado no período filtrado.
-                  Reprocesse a base completa com o novo modelo para habilitar
-                  esta análise.
-                </div>
-              </Section>
-            ) : (
-              <>
-                <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                  <ChartCard title="Ligações por Hora" h={260}>
-                    {!isAttendant && (
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 6,
-                          marginBottom: 10,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        {[
-                          { id: "volume", label: "Volume" },
-                          { id: "media", label: "Média/Hora" },
-                        ].map((option) => {
-                          const isActive = hourlyVolumeMode === option.id;
-                          return (
-                            <button
-                              key={option.id}
-                              onClick={() => setHourlyVolumeMode(option.id)}
-                              style={{
-                                border: `1px solid ${isActive ? P.accent : P.bdr}`,
-                                background: isActive ? `${P.accent}22` : P.card,
-                                color: isActive ? P.text : P.dim,
-                                borderRadius: 999,
-                                padding: "4px 10px",
-                                fontSize: 10,
-                                fontWeight: 700,
-                                letterSpacing: 0.4,
-                                cursor: "pointer",
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <ResponsiveContainer>
-                      <BarChart data={hourlyActivity} barGap={3}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                        <XAxis
-                          dataKey="horaLabel"
-                          tick={{ fill: P.dim, fontSize: 10 }}
-                        />
-                        <YAxis tick={{ fill: P.dim, fontSize: 10 }} />
-                        <Tooltip content={<TT />} />
-                        {isAttendant ? (
-                          <Bar
-                            dataKey="atendidas"
-                            name="Ligações Atendidas"
-                            fill={P.green}
-                            radius={[4, 4, 0, 0]}
-                          />
-                        ) : hourlyVolumeMode === "volume" ? (
-                          <>
-                            <Bar
-                              dataKey="total"
-                              name="Total"
-                              fill={P.accent}
-                              radius={[4, 4, 0, 0]}
-                            />
-                            <Bar
-                              dataKey="atendidas"
-                              name="Atendidas"
-                              fill={P.green}
-                              radius={[4, 4, 0, 0]}
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <Bar
-                              dataKey="mediaTotalHora"
-                              name="Média Total"
-                              fill={P.accent}
-                              radius={[4, 4, 0, 0]}
-                            />
-                            <Bar
-                              dataKey="mediaAtendidasHora"
-                              name="Média Atendidas"
-                              fill={P.green}
-                              radius={[4, 4, 0, 0]}
-                            />
-                          </>
-                        )}
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartCard>
-
-                  {!isAttendant && (
-                    <ChartCard
-                      title="Taxa de abandono/Não atendidas por hora"
-                      h={260}
-                    >
-                      <ResponsiveContainer>
-                        <LineChart data={hourlyActivity}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={P.bdr} />
-                          <XAxis
-                            dataKey="horaLabel"
-                            tick={{ fill: P.dim, fontSize: 10 }}
-                          />
-                          <YAxis
-                            tick={{ fill: P.dim, fontSize: 10 }}
-                            domain={[0, 1]}
-                            tickFormatter={(v) => fmtPct(v)}
-                          />
-                          <Tooltip content={<TT />} />
-                          <Line
-                            type="monotone"
-                            dataKey="txAbandono"
-                            name="Tx Ab./NA"
-                            stroke={P.red}
-                            strokeWidth={2}
-                            dot={{ r: 2 }}
-                          />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </ChartCard>
-                  )}
-                </div>
-
-                <Section title="Detalhamento por Hora" icon={<Ico Icon={ClipboardList} />}>
-                  <Table
-                    headers={
-                      isAttendant
-                        ? ["Hora", "Total", "Atend.", "Não At.", "Aband."]
-                        : [
-                            "Hora",
-                            "Total",
-                            "Atend.",
-                            "Não At.",
-                            "Aband.",
-                            "Tx Atend.",
-                            "Tx Ab./NA",
-                          ]
-                    }
-                    rows={hourlyActivity.map((h) =>
-                      isAttendant
-                        ? [
-                            h.horaLabel,
-                            h.total,
-                            h.atendidas,
-                            h.naoAtendidas,
-                            h.abandonadas,
-                          ]
-                        : [
-                            h.horaLabel,
-                            h.total,
-                            h.atendidas,
-                            h.naoAtendidas,
-                            h.abandonadas,
-                            fmtPct(h.txAtend),
-                            fmtPct(h.txAbandono),
-                          ],
-                    )}
-                  />
-                </Section>
-              </>
-            )}
-          </>
+          <Suspense
+            fallback={
+              <div style={{ padding: 24, color: P.dim }}>
+                Carregando aba Atividade/Hora…
+              </div>
+            }
+          >
+            <AtividadeHoraTab
+              P={P}
+              ChartCard={ChartCard}
+              Section={Section}
+              Table={Table}
+              TT={TT}
+              Ico={Ico}
+              fCons={fCons}
+              fTickets={fTickets}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              produtoFilter={produtoFilter}
+              fmtPct={fmtPct}
+              isAttendant={isAttendant}
+              resolveHourFromConsEntry={resolveHourFromConsEntry}
+              resolveDayGroupFromConsEntry={resolveDayGroupFromConsEntry}
+            />
+          </Suspense>
         )}
 
         {tab === "tickets" && (
