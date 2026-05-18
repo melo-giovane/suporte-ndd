@@ -1,7 +1,7 @@
 # CLAUDE.md — Central de Relacionamentos (v2)
 
 Documento de contexto para desenvolvimento e manutencao do sistema.
-Ultima atualizacao: 16/04/2026
+Ultima atualizacao: 18/05/2026
 
 ---
 
@@ -249,6 +249,13 @@ npm run db:update-daily -- "data/input/Dashboard_-_Central.xlsx"
 
 ## 10. Atualizacoes recentes (16/04/2026)
 
+- Atividade/Hora estendida (18/05/2026):
+  - tickets agora computados por hora de abertura
+  - seletor de fonte: Ambos / Ligações / Tickets
+  - barras empilhadas (atendidas + tickets) no modo Ambos
+  - produto filtrado força modo Tickets
+  - aba extraída para `src/tabs/AtividadeHoraTab.jsx` (lazy)
+  - nova função `buildHourlyActivity` em `dashboardModel.js`
 - Indicadores da aba Resumo ajustados em Telefonia:
   - card de chamadas com foco em atendidas
   - taxa alterada para abandono/nao atendidas
