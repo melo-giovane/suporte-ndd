@@ -75,8 +75,9 @@ export default function AtividadeHoraTab({
 
   const isEmpty = visibleBuckets.length === 0;
 
-  const chart1Title =
-    effectiveMode === "tickets"
+  const chart1Title = isAttendant
+    ? "Ligações Atendidas por Hora"
+    : effectiveMode === "tickets"
       ? "Tickets por Hora"
       : effectiveMode === "ligacoes"
         ? "Ligações por Hora"
