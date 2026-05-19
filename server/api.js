@@ -457,8 +457,7 @@ function readDashboardData(db) {
         status,
         categoria,
         titulo,
-        descricao,
-        raw_json AS rawJson
+        descricao
       FROM chamados
       ORDER BY date_real
     `,
@@ -547,8 +546,7 @@ function readDashboardDataForAttendant(db, user, scope) {
         status,
         categoria,
         titulo,
-        descricao,
-        raw_json AS rawJson
+        descricao
       FROM chamados
       ORDER BY date_real
     `,
@@ -652,8 +650,7 @@ function readDashboardDataForAttendant(db, user, scope) {
             status,
             categoria,
             titulo,
-            descricao,
-            raw_json AS rawJson
+            descricao
           FROM chamados
           WHERE responsavel = ?
           ORDER BY date_real

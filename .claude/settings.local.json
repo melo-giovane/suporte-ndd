@@ -26,7 +26,13 @@
       "PowerShell(node node_modules/eslint/bin/eslint.js src/tabs/ResumoTab.jsx 2>&1 | Select-Object -First 50)",
       "PowerShell(npx.cmd eslint src/tabs/AtividadeHoraTab.jsx)",
       "PowerShell(git diff *)",
-      "PowerShell(git show *)"
+      "PowerShell(git show *)",
+      "Bash(ls -la \"data/sqlite/\")",
+      "Bash(sqlite3 \"data/sqlite/central_relacionamentos.db\" \"SELECT 'cons' as t, COUNT\\(*\\) FROM atplus_cons_daily UNION ALL SELECT 'atend', COUNT\\(*\\) FROM atplus_attendant_daily UNION ALL SELECT 'tickets', COUNT\\(*\\) FROM ellevo_tickets UNION ALL SELECT 'chamados', COUNT\\(*\\) FROM chamados;\")",
+      "Bash(where sqlite3 *)",
+      "Bash(npx --no-install better-sqlite3 --version)",
+      "Bash(node -e \"const Database = require\\('better-sqlite3'\\); const db = new Database\\('data/sqlite/central_relacionamentos.db', {readonly:true}\\); const t = ['atplus_cons_daily','atplus_attendant_daily','ellevo_tickets','chamados']; for\\(const x of t\\){ try { console.log\\(x, db.prepare\\('SELECT COUNT\\(*\\) c FROM '+x\\).get\\(\\).c\\); } catch\\(e\\){ console.log\\(x, 'err', e.message\\); } } db.close\\(\\);\")",
+      "Bash(node *)"
     ]
   }
 }
